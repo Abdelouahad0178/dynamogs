@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion Commerciale Pro</title>
+    
+    <!-- External Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-app-compat.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-auth-compat.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-firestore-compat.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    
+    <!-- Local Styles -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="authContainer" class="auth-container">
+        <div class="auth-card">
+            <h2>🏢 Gestion Commerciale Pro</h2>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="loginEmail" placeholder="votre@email.com">
+                </div>
+                <div class="form-group">
+                    <label>Mot de passe</label>
+                    <input type="password" id="loginPassword" placeholder="Mot de passe">
+                </div>
+                <button type="submit" class="btn btn-primary">Se connecter</button>
+                <p style="text-align: center; margin-top: 20px;">
+                    <a href="#" onclick="showRegister()">Créer un compte</a>
+                </p>
+            </form>
+            
+            <form id="registerForm" style="display: none;">
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="registerEmail" placeholder="votre@email.com">
+                </div>
+                <div class="form-group">
+                    <label>Mot de passe</label>
+                    <input type="password" id="registerPassword" placeholder="Mot de passe">
+                </div>
+                <div class="form-group">
+                    <label>Nom de l'entreprise</label>
+                    <input type="text" id="companyName" placeholder="Nom de votre entreprise">
+                </div>
+                <button type="submit" class="btn btn-primary">Créer le compte</button>
+                <p style="text-align: center; margin-top: 20px;">
+                    <a href="#" onclick="showLogin()">Déjà un compte ?</a>
+                </p>
+            </form>
+        </div>
+    </div>
+
+    <div id="mainApp" class="main-app">
+        <div class="container">
+            <div class="header">
+                <h1>🏢 Gestion Commerciale Pro</h1>
+                <div class="user-info">
+                    <span id="userEmail"></span>
+                    <button class="btn btn-secondary" onclick="logout()">Déconnexion</button>
+                </div>
+            </div>
+
+            <div class="nav-menu">
+                <div class="nav-buttons">
+                    <div class="nav-btn active" onclick="showModule('dashboard')">📊 Tableau de Bord</div>
+                    <div class="nav-btn" onclick="showModule('clients')">👥 Clients & Fournisseurs</div>
+                    <div class="nav-btn" onclick="showModule('quotes')">📋 Devis</div>
+                    <div class="nav-btn" onclick="showModule('invoices')">🧾 Factures</div>
+                    <div class="nav-btn" onclick="showModule('orders')">📦 Bons de Commande</div>
+                    <div class="nav-btn" onclick="showModule('deliveries')">🚚 Bons de Livraison</div>
+                    <div class="nav-btn" onclick="showModule('transactions')">💰 Achats & Ventes</div>
+                    <div class="nav-btn" onclick="showModule('payments')">💳 Paiements</div>
+                    <div class="nav-btn" onclick="showModule('stock')">📈 Stock</div>
+                    <div class="nav-btn" onclick="showModule('settings')">⚙️ Paramètres</div>
+                </div>
+            </div>
+
+            <div class="content-area">
+                <div id="alertSuccess" class="alert alert-success"></div>
+                <div id="alertError" class="alert alert-error"></div>
+
+                <div id="dashboard" class="module active">
+                    <h2>📊 Tableau de Bord</h2>
+                    
+                    <div id="stockAlerts" class="alert-panel" style="display: none;">
+                        <h4>⚠️ Alertes Stock</h4>
+                        <div id="lowStockItems"></div>
+                    </div>
+                    
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3 id="totalClients">0</h3>
+                            <p>Clients</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3 id="totalQuotes">0</h3>
+                            <p>Devis</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3 id="totalInvoices">0</h3>
+                            <p>Factures</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3 id="totalRevenue">0 dhs</h3>
+                            <p>Chiffre d'Affaires</p>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-grid">
+                        <div class="card">
+                            <h3>Évolution des Ventes</h3>
+                            <div class="chart-container">
+                                <canvas id="salesChart"></canvas>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <h3>Répartition par Client</h3>
+                            <div class="chart-container">
+                                <canvas id="clientChart"></canvas>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <h3>Statut des Factures</h3>
+                            <div class="chart-container">
+                                <canvas id="invoiceStatusChart"></canvas>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <h3>Dernières Activités</h3>
+                            <div id="recentActivities">
+                                <div class="activity-list"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3>🚀 Actions Rapides</h3>
+                        <div class="quick-actions">
+                            <button class="btn" onclick="openQuoteModal()">➕ Nouveau Devis</button>
+                            <button class="btn" onclick="openInvoiceModal()">➕ Nouvelle Facture</button>
+                            <button class="btn" onclick="openClientModal()">➕ Nouveau Client</button>
+                            <button class="btn" onclick="openProductModal()">➕ Nouveau Produit</button>
+                            <button class="btn" onclick="openPaymentModal()">💳 Nouveau Paiement</button>
+                            <button class="btn" onclick="openDeliveryModal()">🚚 Nouvelle Livraison</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="clients" class="module">
+                    <h2>👥 Clients & Fournisseurs</h2>
+                    <button class="btn" onclick="openClientModal()">➕ Nouveau Client/Fournisseur</button>
+                    
+                    <div class="search-bar">
+                        <input type="text" id="clientSearch" placeholder="Rechercher un client ou fournisseur..." onkeyup="searchClients()">
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Nom</th>
+                                    <th>Email</th>
+                                    <th>Téléphone</th>
+                                    <th>Type</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="clientsTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="quotes" class="module">
+                    <h2>📋 Devis</h2>
+                    <button class="btn" onclick="openQuoteModal()">➕ Nouveau Devis</button>
+                    
+                    <div class="search-bar">
+                        <input type="text" id="quoteSearch" placeholder="Rechercher un devis..." onkeyup="searchQuotes()">
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>N° Devis</th>
+                                    <th>Client</th>
+                                    <th>Date</th>
+                                    <th>Validité</th>
+                                    <th>Montant TTC</th>
+                                    <th>Statut</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="quotesTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="invoices" class="module">
+                    <h2>🧾 Factures</h2>
+                    <button class="btn" onclick="openInvoiceModal()">➕ Nouvelle Facture</button>
+                    
+                    <div class="search-bar">
+                        <input type="text" id="invoiceSearch" placeholder="Rechercher une facture..." onkeyup="searchInvoices()">
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>N° Facture</th>
+                                    <th>Client</th>
+                                    <th>Date</th>
+                                    <th>Échéance</th>
+                                    <th>Montant TTC</th>
+                                    <th>Statut Paiement</th>
+                                    <th>Statut Livraison</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="invoicesTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="orders" class="module">
+                    <h2>📦 Bons de Commande</h2>
+                    <button class="btn" onclick="openOrderModal()">➕ Nouveau Bon de Commande</button>
+                    
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>N° BC</th>
+                                    <th>Fournisseur</th>
+                                    <th>Date</th>
+                                    <th>Validité</th>
+                                    <th>Montant</th>
+                                    <th>Statut</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ordersTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="deliveries" class="module">
+                    <h2>🚚 Bons de Livraison</h2>
+                    <button class="btn" onclick="openDeliveryModal()">➕ Nouveau Bon de Livraison</button>
+                    
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>N° BL</th>
+                                    <th>Client</th>
+                                    <th>Date</th>
+                                    <th>Articles</th>
+                                    <th>Statut</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="deliveriesTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="transactions" class="module">
+                    <h2>💰 Achats & Ventes</h2>
+                    <button class="btn" onclick="openTransactionModal()">➕ Nouvelle Transaction</button>
+                    
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Type</th>
+                                    <th>Client/Fournisseur</th>
+                                    <th>Montant</th>
+                                    <th>Marge</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="transactionsTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="payments" class="module">
+                    <h2>💳 Paiements</h2>
+                    <button class="btn" onclick="openPaymentModal()">➕ Nouveau Paiement</button>
+                    
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Client/Fournisseur</th>
+                                    <th>Montant</th>
+                                    <th>Mode</th>
+                                    <th>Facture Liée</th>
+                                    <th>Référence</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="paymentsTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="stock" class="module">
+                    <h2>📈 Gestion de Stock</h2>
+                    <button class="btn" onclick="openProductModal()">➕ Nouveau Produit</button>
+                    
+                    <div class="search-bar">
+                        <input type="text" id="stockSearch" placeholder="Rechercher un produit..." onkeyup="searchStock()">
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Référence</th>
+                                    <th>Nom</th>
+                                    <th>Stock Actuel</th>
+                                    <th>Seuil d'Alerte</th>
+                                    <th>Prix Achat</th>
+                                    <th>Prix Vente</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stockTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="settings" class="module">
+                    <h2>⚙️ Paramètres de l'Entreprise</h2>
+                    
+                    <div class="card">
+                        <h3>📄 Informations de l'entreprise</h3>
+                        <form id="companyInfoForm">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Nom de l'entreprise *</label>
+                                    <input type="text" id="companyNameSettings" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>SIRET</label>
+                                    <input type="text" id="companySiret">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Adresse</label>
+                                    <textarea id="companyAddress" rows="3"></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Téléphone</label>
+                                    <input type="tel" id="companyPhone">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Email</label>
+                                    <input type="email" id="companyEmail">
+                                </div>
+                                <div class="form-group">
+                                    <label>Site web</label>
+                                    <input type="url" id="companyWebsite">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn">💾 Enregistrer les informations</button>
+                        </form>
+                    </div>
+
+                    <div class="settings-grid">
+                        <div class="card">
+                            <h3>🖼️ Logo de l'entreprise</h3>
+                            <div class="upload-area" id="logoUploadArea" onclick="document.getElementById('logoInput').click()">
+                                <div id="logoPreview">
+                                    <p>📁 Cliquez ici pour ajouter votre logo</p>
+                                    <p class="file-info">Format recommandé: PNG, JPG (max 2MB)</p>
+                                </div>
+                                <input type="file" id="logoInput" accept="image/*" style="display: none;">
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <h3>🔖 Cachet de l'entreprise</h3>
+                            <div class="upload-area" id="stampUploadArea" onclick="document.getElementById('stampInput').click()">
+                                <div id="stampPreview">
+                                    <p>📁 Cliquez ici pour ajouter votre cachet</p>
+                                    <p class="file-info">Format recommandé: PNG avec fond transparent (max 2MB)</p>
+                                </div>
+                                <input type="file" id="stampInput" accept="image/*" style="display: none;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3>📊 Préférences des documents</h3>
+                        <form id="documentPreferencesForm">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Taux de TVA par défaut (%)</label>
+                                    <input type="number" id="defaultTaxRate" value="20" step="0.01" min="0" max="100">
+                                </div>
+                                <div class="form-group">
+                                    <label>Devise</label>
+                                    <select id="defaultCurrency">
+                                        <option value="dhs">Dirham (dhs)</option>
+                                        <option value="eur">Euro (€)</option>
+                                        <option value="usd">Dollar ($)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Conditions de paiement par défaut</label>
+                                    <textarea id="defaultPaymentTerms" rows="3" placeholder="Ex: Paiement à 30 jours fin de mois..."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Notes par défaut</label>
+                                    <textarea id="defaultNotes" rows="3" placeholder="Ex: Merci de votre confiance..."></textarea>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn">💾 Enregistrer les préférences</button>
+                        </form>
+                    </div>
+
+                    <div class="card">
+                        <h3>🔄 Sauvegarde et Export</h3>
+                        <div class="quick-actions">
+                            <button class="btn btn-info" onclick="exportAllData()">📤 Exporter toutes les données</button>
+                            <button class="btn btn-warning" onclick="importData()">📥 Importer des données</button>
+                            <button class="btn btn-secondary" onclick="resetSettings()">🔄 Réinitialiser les paramètres</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Client -->
+    <div id="clientModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Client/Fournisseur</h3>
+                <span class="close" onclick="closeModal('clientModal')">&times;</span>
+            </div>
+            <form id="clientForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Nom *</label>
+                        <input type="text" id="clientName" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Type *</label>
+                        <select id="clientType" required>
+                            <option value="client">Client</option>
+                            <option value="fournisseur">Fournisseur</option>
+                            <option value="les-deux">Les deux</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="clientEmail">
+                    </div>
+                    <div class="form-group">
+                        <label>Téléphone</label>
+                        <input type="tel" id="clientPhone">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Adresse</label>
+                    <textarea id="clientAddress" rows="3"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>SIRET</label>
+                        <input type="text" id="clientSiret">
+                    </div>
+                    <div class="form-group">
+                        <label>TVA Intracommunautaire</label>
+                        <input type="text" id="clientVat">
+                    </div>
+                </div>
+                <button type="submit" class="btn">Enregistrer</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal('clientModal')">Annuler</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Devis -->
+    <div id="quoteModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Nouveau Devis</h3>
+                <span class="close" onclick="closeModal('quoteModal')">&times;</span>
+            </div>
+            <form id="quoteForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>N° Devis</label>
+                        <input type="text" id="quoteNumber" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>Date *</label>
+                        <input type="date" id="quoteDate" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Client *</label>
+                        <select id="quoteClient" required>
+                            <option value="">Sélectionner un client</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Validité</label>
+                        <select id="quoteValidity">
+                            <option value="30">30 jours</option>
+                            <option value="60">60 jours</option>
+                            <option value="90">90 jours</option>
+                            <option value="custom">Personnalisé</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group" id="customValidityGroup" style="display: none;">
+                    <label>Date de validité</label>
+                    <input type="date" id="quoteValidityDate">
+                </div>
+                
+                <h4>Articles</h4>
+                <div id="quoteLines" class="invoice-lines">
+                    <div class="line-item">
+                        <input type="text" placeholder="Description" class="line-description">
+                        <input type="number" placeholder="Qté" class="line-quantity" step="0.01">
+                        <input type="number" placeholder="Prix unitaire" class="line-price" step="0.01">
+                        <input type="number" placeholder="Total" class="line-total" readonly>
+                        <button type="button" onclick="removeLine(this)">🗑️</button>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-secondary" onclick="addQuoteLine()">➕ Ajouter une ligne</button>
+                
+                <div class="totals">
+                    <div class="total-line">
+                        <span>Total HT:</span>
+                        <span id="quoteSubtotal">0.00 dhs</span>
+                    </div>
+                    <div class="total-line">
+                        <span>TVA (20%):</span>
+                        <span id="quoteTax">0.00 dhs</span>
+                    </div>
+                    <div class="total-line final">
+                        <span>Total TTC:</span>
+                        <span id="quoteTotal">0.00 dhs</span>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn">Enregistrer le Devis</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal('quoteModal')">Annuler</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Facture -->
+    <div id="invoiceModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Nouvelle Facture</h3>
+                <span class="close" onclick="closeModal('invoiceModal')">&times;</span>
+            </div>
+            <form id="invoiceForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>N° Facture</label>
+                        <input type="text" id="invoiceNumber" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>Date *</label>
+                        <input type="date" id="invoiceDate" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Client *</label>
+                        <select id="invoiceClient" required>
+                            <option value="">Sélectionner un client</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Type de facture</label>
+                        <select id="invoiceType">
+                            <option value="normale">Normale</option>
+                            <option value="proforma">Pro-forma</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Convertir depuis un devis</label>
+                        <select id="fromQuote">
+                            <option value="">Nouvelle facture</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Échéance de paiement</label>
+                        <select id="invoicePaymentDue">
+                            <option value="0">Immédiat</option>
+                            <option value="30">30 jours</option>
+                            <option value="60">60 jours</option>
+                            <option value="90">90 jours</option>
+                            <option value="custom">Personnalisé</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group" id="customPaymentDueGroup" style="display: none;">
+                    <label>Date d'échéance</label>
+                    <input type="date" id="invoicePaymentDueDate">
+                </div>
+                
+                <h4>Articles</h4>
+                <div id="invoiceLines" class="invoice-lines">
+                    <div class="line-item">
+                        <input type="text" placeholder="Description" class="line-description">
+                        <input type="number" placeholder="Qté" class="line-quantity" step="0.01">
+                        <input type="number" placeholder="Prix unitaire" class="line-price" step="0.01">
+                        <input type="number" placeholder="Total" class="line-total" readonly>
+                        <button type="button" onclick="removeLine(this)">🗑️</button>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-secondary" onclick="addInvoiceLine()">➕ Ajouter une ligne</button>
+                
+                <div class="totals">
+                    <div class="total-line">
+                        <span>Total HT:</span>
+                        <span id="invoiceSubtotal">0.00 dhs</span>
+                    </div>
+                    <div class="total-line">
+                        <span>TVA (20%):</span>
+                        <span id="invoiceTax">0.00 dhs</span>
+                    </div>
+                    <div class="total-line final">
+                        <span>Total TTC:</span>
+                        <span id="invoiceTotal">0.00 dhs</span>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn">Enregistrer la Facture</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal('invoiceModal')">Annuler</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Bon de Commande -->
+    <div id="orderModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Nouveau Bon de Commande</h3>
+                <span class="close" onclick="closeModal('orderModal')">&times;</span>
+            </div>
+            <form id="orderForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>N° Bon de Commande</label>
+                        <input type="text" id="orderNumber" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>Date *</label>
+                        <input type="date" id="orderDate" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Fournisseur *</label>
+                        <select id="orderSupplier" required>
+                            <option value="">Sélectionner un fournisseur</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Validité de la commande</label>
+                        <select id="orderValidity">
+                            <option value="15">15 jours</option>
+                            <option value="30">30 jours</option>
+                            <option value="60">60 jours</option>
+                            <option value="custom">Personnalisé</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group" id="customOrderValidityGroup" style="display: none;">
+                        <label>Date de validité</label>
+                        <input type="date" id="orderValidityDate">
+                    </div>
+                    <div class="form-group">
+                        <label>Date de livraison prévue</label>
+                        <input type="date" id="orderDeliveryDate">
+                    </div>
+                </div>
+                
+                <h4>Articles</h4>
+                <div id="orderLines" class="invoice-lines">
+                    <div class="line-item">
+                        <input type="text" placeholder="Description" class="line-description">
+                        <input type="number" placeholder="Qté" class="line-quantity" step="0.01">
+                        <input type="number" placeholder="Prix unitaire" class="line-price" step="0.01">
+                        <input type="number" placeholder="Total" class="line-total" readonly>
+                        <button type="button" onclick="removeLine(this)">🗑️</button>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-secondary" onclick="addOrderLine()">➕ Ajouter une ligne</button>
+                
+                <div class="totals">
+                    <div class="total-line">
+                        <span>Total HT:</span>
+                        <span id="orderSubtotal">0.00 dhs</span>
+                    </div>
+                    <div class="total-line">
+                        <span>TVA (20%):</span>
+                        <span id="orderTax">0.00 dhs</span>
+                    </div>
+                    <div class="total-line final">
+                        <span>Total TTC:</span>
+                        <span id="orderTotal">0.00 dhs</span>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn">Enregistrer le Bon de Commande</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal('orderModal')">Annuler</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Paiement -->
+    <div id="paymentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Nouveau Paiement</h3>
+                <span class="close" onclick="closeModal('paymentModal')">&times;</span>
+            </div>
+            <form id="paymentForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Type *</label>
+                        <select id="paymentType" required>
+                            <option value="recu">Paiement reçu (Client)</option>
+                            <option value="emis">Paiement émis (Fournisseur)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Date *</label>
+                        <input type="date" id="paymentDate" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Client/Fournisseur *</label>
+                    <select id="paymentPartner" required>
+                        <option value="">Sélectionner</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Montant *</label>
+                        <input type="number" id="paymentAmount" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Mode de paiement *</label>
+                        <select id="paymentMethod" required>
+                            <option value="especes">Espèces</option>
+                            <option value="cheque">Chèque</option>
+                            <option value="virement">Virement</option>
+                            <option value="carte">Carte bancaire</option>
+                            <option value="prelevement">Prélèvement</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Référence</label>
+                    <input type="text" id="paymentReference" placeholder="N° chèque, référence virement...">
+                </div>
+                <div class="form-group">
+                    <label>Facture liée</label>
+                    <select id="paymentInvoice">
+                        <option value="">Aucune facture liée</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="paymentNotes" rows="2"></textarea>
+                </div>
+                
+                <button type="submit" class="btn">Enregistrer le Paiement</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal('paymentModal')">Annuler</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Bon de Livraison -->
+    <div id="deliveryModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Nouveau Bon de Livraison</h3>
+                <span class="close" onclick="closeModal('deliveryModal')">&times;</span>
+            </div>
+            <form id="deliveryForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>N° Bon de Livraison</label>
+                        <input type="text" id="deliveryNumber" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>Date de livraison *</label>
+                        <input type="date" id="deliveryDate" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Client *</label>
+                        <select id="deliveryClient" required>
+                            <option value="">Sélectionner un client</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Statut de livraison</label>
+                        <select id="deliveryStatus">
+                            <option value="non-livree">Non livrée</option>
+                            <option value="expedie">Expédiée</option>
+                            <option value="en-cours">En cours de livraison</option>
+                            <option value="livree">Livrée</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Facture liée</label>
+                    <select id="deliveryInvoice">
+                        <option value="">Aucune facture liée</option>
+                    </select>
+                </div>
+                
+                <h4>Articles livrés</h4>
+                <div id="deliveryLines" class="invoice-lines">
+                    <div class="line-item">
+                        <input type="text" placeholder="Description" class="line-description">
+                        <input type="number" placeholder="Qté livrée" class="line-quantity" step="0.01">
+                        <input type="text" placeholder="Référence" class="line-reference">
+                        <button type="button" onclick="removeLine(this)">🗑️</button>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-secondary" onclick="addDeliveryLine()">➕ Ajouter une ligne</button>
+                
+                <div class="form-group">
+                    <label>Notes de livraison</label>
+                    <textarea id="deliveryNotes" rows="3" placeholder="Commentaires, conditions de livraison..."></textarea>
+                </div>
+                
+                <button type="submit" class="btn">Enregistrer le Bon de Livraison</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal('deliveryModal')">Annuler</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Produit -->
+    <div id="productModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Produit</h3>
+                <span class="close" onclick="closeModal('productModal')">&times;</span>
+            </div>
+            <form id="productForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Référence *</label>
+                        <input type="text" id="productRef" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Nom *</label>
+                        <input type="text" id="productName" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Prix d'achat</label>
+                        <input type="number" id="productBuyPrice" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label>Prix de vente</label>
+                        <input type="number" id="productSellPrice" step="0.01">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Stock actuel</label>
+                        <input type="number" id="productStock" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Seuil d'alerte</label>
+                        <input type="number" id="productAlert" value="5">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="productDescription" rows="3"></textarea>
+                </div>
+                <button type="submit" class="btn">Enregistrer</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal('productModal')">Annuler</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Transaction -->
+    <div id="transactionModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Nouvelle Transaction</h3>
+                <span class="close" onclick="closeModal('transactionModal')">&times;</span>
+            </div>
+            <form id="transactionForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Type *</label>
+                        <select id="transactionType" required onchange="updateTransactionForm()">
+                            <option value="vente">Vente</option>
+                            <option value="achat">Achat</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Date *</label>
+                        <input type="date" id="transactionDate" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label id="partnerLabel">Client *</label>
+                    <select id="transactionPartner" required>
+                        <option value="">Sélectionner</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Produit</label>
+                        <select id="transactionProduct">
+                            <option value="">Sélectionner un produit</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Quantité</label>
+                        <input type="number" id="transactionQuantity" step="0.01">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Prix unitaire *</label>
+                        <input type="number" id="transactionPrice" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Montant total</label>
+                        <input type="number" id="transactionTotal" step="0.01" readonly>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="transactionDescription" rows="2"></textarea>
+                </div>
+                
+                <button type="submit" class="btn">Enregistrer la Transaction</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal('transactionModal')">Annuler</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Local JavaScript -->
+    <script src="script.js"></script>
+</body>
+</html>
