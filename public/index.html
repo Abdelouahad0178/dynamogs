@@ -22,30 +22,31 @@
             <form id="loginForm">
                 <div class="form-group">
                     <label>Email</label>
-                    <input type="email" id="loginEmail" placeholder="votre@email.com">
+                    <input type="email" id="loginEmail" placeholder="votre@email.com" autocomplete="email">
                 </div>
                 <div class="form-group">
                     <label>Mot de passe</label>
-                    <input type="password" id="loginPassword" placeholder="Mot de passe">
+                    <input type="password" id="loginPassword" placeholder="Mot de passe" autocomplete="current-password">
                 </div>
                 <button type="submit" class="btn btn-primary">Se connecter</button>
                 <p style="text-align: center; margin-top: 20px;">
                     <a href="#" onclick="showRegister()">Créer un compte</a>
                 </p>
+                
             </form>
             
             <form id="registerForm" style="display: none;">
                 <div class="form-group">
                     <label>Email</label>
-                    <input type="email" id="registerEmail" placeholder="votre@email.com">
+                    <input type="email" id="registerEmail" placeholder="votre@email.com" autocomplete="email">
                 </div>
                 <div class="form-group">
                     <label>Mot de passe</label>
-                    <input type="password" id="registerPassword" placeholder="Mot de passe">
+                    <input type="password" id="registerPassword" placeholder="Mot de passe" autocomplete="new-password">
                 </div>
                 <div class="form-group">
                     <label>Nom de l'entreprise</label>
-                    <input type="text" id="companyName" placeholder="Nom de votre entreprise">
+                    <input type="text" id="companyName" placeholder="Nom de votre entreprise" autocomplete="organization">
                 </div>
                 <button type="submit" class="btn btn-primary">Créer le compte</button>
                 <p style="text-align: center; margin-top: 20px;">
@@ -65,18 +66,49 @@
                 </div>
             </div>
 
+            <!-- Navigation corrigée sans onclick inline -->
             <div class="nav-menu">
                 <div class="nav-buttons">
-                    <div class="nav-btn active" onclick="showModule('dashboard')">📊 Tableau de Bord</div>
-                    <div class="nav-btn" onclick="showModule('clients')">👥 Clients & Fournisseurs</div>
-                    <div class="nav-btn" onclick="showModule('quotes')">📋 Devis</div>
-                    <div class="nav-btn" onclick="showModule('invoices')">🧾 Factures</div>
-                    <div class="nav-btn" onclick="showModule('orders')">📦 Bons de Commande</div>
-                    <div class="nav-btn" onclick="showModule('deliveries')">🚚 Bons de Livraison</div>
-                    <div class="nav-btn" onclick="showModule('transactions')">💰 Achats & Ventes</div>
-                    <div class="nav-btn" onclick="showModule('payments')">💳 Paiements</div>
-                    <div class="nav-btn" onclick="showModule('stock')">📈 Stock</div>
-                    <div class="nav-btn" onclick="showModule('settings')">⚙️ Paramètres</div>
+                    <div class="nav-btn active" data-module="dashboard">
+                        <span class="emoji">📊</span>
+                        <span>Tableau de Bord</span>
+                    </div>
+                    <div class="nav-btn" data-module="clients">
+                        <span class="emoji">👥</span>
+                        <span>Clients & Fournisseurs</span>
+                    </div>
+                    <div class="nav-btn" data-module="quotes">
+                        <span class="emoji">📋</span>
+                        <span>Devis</span>
+                    </div>
+                    <div class="nav-btn" data-module="invoices">
+                        <span class="emoji">🧾</span>
+                        <span>Factures</span>
+                    </div>
+                    <div class="nav-btn" data-module="orders">
+                        <span class="emoji">📦</span>
+                        <span>Bons de Commande</span>
+                    </div>
+                    <div class="nav-btn" data-module="deliveries">
+                        <span class="emoji">🚚</span>
+                        <span>Bons de Livraison</span>
+                    </div>
+                    <div class="nav-btn" data-module="transactions">
+                        <span class="emoji">💰</span>
+                        <span>Achats & Ventes</span>
+                    </div>
+                    <div class="nav-btn" data-module="payments">
+                        <span class="emoji">💳</span>
+                        <span>Paiements</span>
+                    </div>
+                    <div class="nav-btn" data-module="stock">
+                        <span class="emoji">📈</span>
+                        <span>Stock</span>
+                    </div>
+                    <div class="nav-btn" data-module="settings">
+                        <span class="emoji">⚙️</span>
+                        <span>Paramètres</span>
+                    </div>
                 </div>
             </div>
 
@@ -86,6 +118,61 @@
 
                 <div id="dashboard" class="module active">
                     <h2>📊 Tableau de Bord</h2>
+                    
+                    <!-- Section Filtres -->
+                    <div class="card">
+                        <h3>🔍 Filtres</h3>
+                        <div class="filters-grid">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Date de début</label>
+                                    <input type="date" id="filterDateStart" onchange="applyDashboardFilters()">
+                                </div>
+                                <div class="form-group">
+                                    <label>Date de fin</label>
+                                    <input type="date" id="filterDateEnd" onchange="applyDashboardFilters()">
+                                </div>
+                                <div class="form-group">
+                                    <label>Client</label>
+                                    <select id="filterClient" onchange="applyDashboardFilters()">
+                                        <option value="">Tous les clients</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Statut de paiement</label>
+                                    <select id="filterPaymentStatus" onchange="applyDashboardFilters()">
+                                        <option value="">Tous les statuts</option>
+                                        <option value="payee">Payée</option>
+                                        <option value="impayee">Impayée</option>
+                                        <option value="partiellement-payee">Partiellement payée</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Type de document</label>
+                                    <select id="filterDocumentType" onchange="applyDashboardFilters()">
+                                        <option value="">Tous les documents</option>
+                                        <option value="quotes">Devis</option>
+                                        <option value="invoices">Factures</option>
+                                        <option value="orders">Bons de commande</option>
+                                        <option value="deliveries">Bons de livraison</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Montant minimum (dhs)</label>
+                                    <input type="number" id="filterMinAmount" step="0.01" placeholder="0.00" onchange="applyDashboardFilters()">
+                                </div>
+                                <div class="form-group">
+                                    <label>Montant maximum (dhs)</label>
+                                    <input type="number" id="filterMaxAmount" step="0.01" placeholder="10000.00" onchange="applyDashboardFilters()">
+                                </div>
+                                <div class="form-group" style="display: flex; align-items: end;">
+                                    <button class="btn btn-secondary" onclick="resetDashboardFilters()">🔄 Réinitialiser</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     
                     <div id="stockAlerts" class="alert-panel" style="display: none;">
                         <h4>⚠️ Alertes Stock</h4>
@@ -360,31 +447,31 @@
                             <div class="form-row">
                                 <div class="form-group">
                                     <label>Nom de l'entreprise *</label>
-                                    <input type="text" id="companyNameSettings" required>
+                                    <input type="text" id="companyNameSettings" required autocomplete="organization">
                                 </div>
                                 <div class="form-group">
                                     <label>SIRET</label>
-                                    <input type="text" id="companySiret">
+                                    <input type="text" id="companySiret" autocomplete="off">
                                 </div>
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
                                     <label>Adresse</label>
-                                    <textarea id="companyAddress" rows="3"></textarea>
+                                    <textarea id="companyAddress" rows="3" autocomplete="street-address"></textarea>
                                 </div>
                                 <div class="form-group">
                                     <label>Téléphone</label>
-                                    <input type="tel" id="companyPhone">
+                                    <input type="tel" id="companyPhone" autocomplete="tel">
                                 </div>
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
                                     <label>Email</label>
-                                    <input type="email" id="companyEmail">
+                                    <input type="email" id="companyEmail" autocomplete="email">
                                 </div>
                                 <div class="form-group">
                                     <label>Site web</label>
-                                    <input type="url" id="companyWebsite">
+                                    <input type="url" id="companyWebsite" autocomplete="url">
                                 </div>
                             </div>
                             <button type="submit" class="btn">💾 Enregistrer les informations</button>
@@ -470,11 +557,11 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label>Nom *</label>
-                        <input type="text" id="clientName" required>
+                        <input type="text" id="clientName" required autocomplete="name">
                     </div>
                     <div class="form-group">
                         <label>Type *</label>
-                        <select id="clientType" required>
+                        <select id="clientType" required autocomplete="off">
                             <option value="client">Client</option>
                             <option value="fournisseur">Fournisseur</option>
                             <option value="les-deux">Les deux</option>
@@ -484,25 +571,25 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label>Email</label>
-                        <input type="email" id="clientEmail">
+                        <input type="email" id="clientEmail" autocomplete="email">
                     </div>
                     <div class="form-group">
                         <label>Téléphone</label>
-                        <input type="tel" id="clientPhone">
+                        <input type="tel" id="clientPhone" autocomplete="tel">
                     </div>
                 </div>
                 <div class="form-group">
                     <label>Adresse</label>
-                    <textarea id="clientAddress" rows="3"></textarea>
+                    <textarea id="clientAddress" rows="3" autocomplete="street-address"></textarea>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
                         <label>SIRET</label>
-                        <input type="text" id="clientSiret">
+                        <input type="text" id="clientSiret" autocomplete="off">
                     </div>
                     <div class="form-group">
                         <label>TVA Intracommunautaire</label>
-                        <input type="text" id="clientVat">
+                        <input type="text" id="clientVat" autocomplete="off">
                     </div>
                 </div>
                 <button type="submit" class="btn">Enregistrer</button>

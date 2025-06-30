@@ -1,4 +1,4 @@
-// script.js - JavaScript pour Gestion Commerciale Pro
+// script.js - JavaScript pour Gestion Commerciale Pro - VERSION CORRIGÉE
 
 // Configuration Firebase
 const firebaseConfig = {
@@ -27,7 +27,9 @@ let orders = [];
 let deliveries = [];
 let transactions = [];
 let payments = [];
-let companySettings = {
+
+// Paramètres par défaut SEULEMENT pour les nouveaux comptes
+const DEFAULT_COMPANY_SETTINGS = {
     name: '',
     siret: '',
     address: '',
@@ -41,6 +43,9 @@ let companySettings = {
     paymentTerms: '',
     defaultNotes: ''
 };
+
+// Paramètres actuels de l'entreprise (préservés entre les sessions)
+let companySettings = { ...DEFAULT_COMPANY_SETTINGS };
 
 // Variables pour les graphiques
 let salesChart = null;
@@ -147,7 +152,7 @@ auth.onAuthStateChanged(user => {
         
         destroyAllCharts();
         loadData();
-        initializeNavbarEffects();
+        initializeNavigation();
     } else {
         destroyAllCharts();
         document.getElementById('authContainer').style.display = 'flex';
@@ -220,8 +225,9 @@ function logout() {
     auth.signOut();
 }
 
-// Navigation entre modules - VERSION AMÉLIORÉE
-function showModule(moduleId) {
+
+// Navigation entre modules - VERSION CORRIGÉE
+function showModule(moduleId, clickedButton = null) {
     // Cacher tous les modules
     document.querySelectorAll('.module').forEach(module => {
         module.classList.remove('active');
@@ -234,11 +240,24 @@ function showModule(moduleId) {
     
     // Afficher le module sélectionné avec animation
     const targetModule = document.getElementById(moduleId);
+    if (!targetModule) {
+        console.error(`Module ${moduleId} introuvable`);
+        return;
+    }
+    
     targetModule.classList.add('active');
     
-    // Ajouter la classe active au bouton cliqué avec un petit délai pour l'animation
+    // Ajouter la classe active au bouton cliqué
     setTimeout(() => {
-        event.target.closest('.nav-btn').classList.add('active');
+        if (clickedButton) {
+            clickedButton.classList.add('active');
+        } else {
+            // Fallback: trouver le bouton correspondant par l'attribut data-module
+            const targetBtn = document.querySelector(`[data-module="${moduleId}"]`);
+            if (targetBtn) {
+                targetBtn.classList.add('active');
+            }
+        }
     }, 50);
     
     // Animation de transition douce
@@ -297,6 +316,23 @@ function showModule(moduleId) {
     }
 }
 
+// Initialiser la navigation
+function initializeNavigation() {
+    document.querySelectorAll('.nav-btn').forEach((btn) => {
+        const moduleId = btn.getAttribute('data-module');
+        
+        if (moduleId) {
+            btn.addEventListener('click', function(event) {
+                event.preventDefault();
+                showModule(moduleId, this);
+            });
+        }
+    });
+
+    // Initialiser les effets du navbar
+    initializeNavbarEffects();
+}
+
 // Initialiser les effets du navbar
 function initializeNavbarEffects() {
     // Effet de particules au survol
@@ -341,6 +377,44 @@ function showAlert(message, type) {
     }, 5000);
 }
 
+// Fonction pour les notifications discrètes de sauvegarde automatique
+function showAutoSaveNotification(message) {
+    // Créer une notification discrète
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #28a745;
+        color: white;
+        padding: 10px 20px;
+        border-radius: 5px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        z-index: 10000;
+        font-size: 14px;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    `;
+    notification.textContent = message;
+    
+    document.body.appendChild(notification);
+    
+    // Animation d'apparition
+    setTimeout(() => {
+        notification.style.opacity = '1';
+    }, 100);
+    
+    // Suppression automatique
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 300);
+    }, 2000);
+}
+
 // Chargement des données
 async function loadData() {
     if (!currentUser) return;
@@ -382,63 +456,159 @@ async function loadData() {
     }
 }
 
-// Gestion des paramètres d'entreprise
-async function loadCompanySettings() {
+// Initialisation des paramètres pour les nouveaux comptes SEULEMENT
+async function initializeNewAccountSettings() {
     if (!currentUser) return;
     
     try {
         const settingsDoc = await db.collection('companies').doc(currentUser.uid).get();
-        if (settingsDoc.exists) {
-            const data = settingsDoc.data();
-            companySettings = {
-                name: data.name || '',
-                siret: data.siret || '',
-                address: data.address || '',
-                phone: data.phone || '',
-                email: data.email || '',
-                website: data.website || '',
-                logo: data.logo || null,
-                stamp: data.stamp || null,
-                taxRate: data.taxRate || 20,
-                currency: data.currency || 'dhs',
-                paymentTerms: data.paymentTerms || '',
-                defaultNotes: data.defaultNotes || ''
+        
+        if (!settingsDoc.exists) {
+            // C'est un nouveau compte - initialiser avec les paramètres par défaut
+            console.log('🆕 Nouveau compte détecté - Initialisation des paramètres par défaut');
+            
+            const initialSettings = {
+                ...DEFAULT_COMPANY_SETTINGS,
+                email: currentUser.email, // Utiliser l'email de connexion
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
             };
             
-            // Remplir les champs du formulaire
-            document.getElementById('companyNameSettings').value = companySettings.name;
-            document.getElementById('companySiret').value = companySettings.siret;
-            document.getElementById('companyAddress').value = companySettings.address;
-            document.getElementById('companyPhone').value = companySettings.phone;
-            document.getElementById('companyEmail').value = companySettings.email;
-            document.getElementById('companyWebsite').value = companySettings.website;
-            document.getElementById('defaultTaxRate').value = companySettings.taxRate;
-            document.getElementById('defaultCurrency').value = companySettings.currency;
-            document.getElementById('defaultPaymentTerms').value = companySettings.paymentTerms;
-            document.getElementById('defaultNotes').value = companySettings.defaultNotes;
+            await db.collection('companies').doc(currentUser.uid).set(initialSettings);
+            companySettings = { ...initialSettings };
             
-            // Afficher les images si elles existent
-            if (companySettings.logo) {
-                displayImagePreview('logo', companySettings.logo);
-            }
-            if (companySettings.stamp) {
-                displayImagePreview('stamp', companySettings.stamp);
-            }
+            showAlert('🎉 Bienvenue ! Vos paramètres par défaut ont été initialisés', 'success');
         }
     } catch (error) {
-        console.error('Erreur lors du chargement des paramètres:', error);
+        console.error('Erreur lors de l\'initialisation des paramètres:', error);
     }
 }
 
+// Gestion des paramètres d'entreprise - VERSION PERSISTANTE
+async function loadCompanySettings() {
+    if (!currentUser) return;
+    
+    try {
+        // D'abord, initialiser les paramètres pour les nouveaux comptes
+        await initializeNewAccountSettings();
+        
+        const settingsDoc = await db.collection('companies').doc(currentUser.uid).get();
+        if (settingsDoc.exists) {
+            const data = settingsDoc.data();
+            
+            // CONSERVER les paramètres existants, ne jamais les écraser
+            companySettings = {
+                name: data.name !== undefined ? data.name : companySettings.name,
+                siret: data.siret !== undefined ? data.siret : companySettings.siret,
+                address: data.address !== undefined ? data.address : companySettings.address,
+                phone: data.phone !== undefined ? data.phone : companySettings.phone,
+                email: data.email !== undefined ? data.email : companySettings.email,
+                website: data.website !== undefined ? data.website : companySettings.website,
+                logo: data.logo !== undefined ? data.logo : companySettings.logo,
+                stamp: data.stamp !== undefined ? data.stamp : companySettings.stamp,
+                taxRate: data.taxRate !== undefined ? data.taxRate : companySettings.taxRate,
+                currency: data.currency !== undefined ? data.currency : companySettings.currency,
+                paymentTerms: data.paymentTerms !== undefined ? data.paymentTerms : companySettings.paymentTerms,
+                defaultNotes: data.defaultNotes !== undefined ? data.defaultNotes : companySettings.defaultNotes
+            };
+            
+            console.log('✅ Paramètres de l\'entreprise chargés depuis la base de données');
+        }
+        
+        // Mettre à jour les champs du formulaire
+        updateSettingsFormFields();
+        
+    } catch (error) {
+        console.error('Erreur lors du chargement des paramètres:', error);
+        showAlert('Erreur lors du chargement des paramètres', 'error');
+    }
+}
+
+// Fonction pour mettre à jour les champs du formulaire avec les données chargées
+function updateSettingsFormFields() {
+    const fieldMappings = [
+        { id: 'companyNameSettings', value: companySettings.name },
+        { id: 'companySiret', value: companySettings.siret },
+        { id: 'companyAddress', value: companySettings.address },
+        { id: 'companyPhone', value: companySettings.phone },
+        { id: 'companyEmail', value: companySettings.email },
+        { id: 'companyWebsite', value: companySettings.website },
+        { id: 'defaultTaxRate', value: companySettings.taxRate },
+        { id: 'defaultCurrency', value: companySettings.currency },
+        { id: 'defaultPaymentTerms', value: companySettings.paymentTerms },
+        { id: 'defaultNotes', value: companySettings.defaultNotes }
+    ];
+    
+    fieldMappings.forEach(mapping => {
+        const field = document.getElementById(mapping.id);
+        if (field && mapping.value !== undefined && mapping.value !== null) {
+            field.value = mapping.value;
+            
+            // Ajouter un indicateur visuel de synchronisation
+            field.style.borderLeft = '3px solid #28a745';
+            setTimeout(() => {
+                if (field.style) {
+                    field.style.borderLeft = '';
+                }
+            }, 2000);
+        }
+    });
+    
+    // Afficher les images si elles existent
+    if (companySettings.logo) {
+        displayImagePreview('logo', companySettings.logo);
+    }
+    if (companySettings.stamp) {
+        displayImagePreview('stamp', companySettings.stamp);
+    }
+    
+    console.log('📋 Formulaires mis à jour avec les données sauvegardées');
+}
+
+// Fonction de sauvegarde améliorée qui préserve les données existantes
 async function saveCompanySettings() {
     if (!currentUser) return;
     
     try {
-        await db.collection('companies').doc(currentUser.uid).update(companySettings);
-        showAlert('Paramètres sauvegardés avec succès', 'success');
+        // Ajouter un timestamp de dernière modification
+        const settingsToSave = {
+            ...companySettings,
+            lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        
+        // Utiliser merge: true pour préserver les données existantes non modifiées
+        await db.collection('companies').doc(currentUser.uid).set(settingsToSave, { merge: true });
+        showAlert('💾 Paramètres sauvegardés avec succès', 'success');
+        console.log('✅ Paramètres de l\'entreprise sauvegardés');
     } catch (error) {
-        showAlert('Erreur lors de la sauvegarde', 'error');
-        console.error(error);
+        showAlert('❌ Erreur lors de la sauvegarde', 'error');
+        console.error('Erreur sauvegarde:', error);
+    }
+}
+
+// Fonction pour sauvegarder SEULEMENT les champs modifiés
+async function saveCompanyField(fieldName, value) {
+    if (!currentUser) return;
+    
+    try {
+        const updateData = {
+            [fieldName]: value,
+            lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        
+        companySettings[fieldName] = value;
+        
+        await db.collection('companies').doc(currentUser.uid).update(updateData);
+        console.log(`✅ Champ ${fieldName} sauvegardé automatiquement:`, value);
+    } catch (error) {
+        console.error(`❌ Erreur lors de la sauvegarde du champ ${fieldName}:`, error);
+        // Si le document n'existe pas, le créer
+        if (error.code === 'not-found') {
+            console.log('Document inexistant, création en cours...');
+            await saveCompanySettings();
+        } else {
+            showAlert(`Erreur lors de la sauvegarde de ${fieldName}`, 'error');
+        }
     }
 }
 
@@ -447,8 +617,8 @@ function setupImageUpload() {
     const logoInput = document.getElementById('logoInput');
     const stampInput = document.getElementById('stampInput');
     
-    logoInput.addEventListener('change', (e) => handleImageUpload(e, 'logo'));
-    stampInput.addEventListener('change', (e) => handleImageUpload(e, 'stamp'));
+    if (logoInput) logoInput.addEventListener('change', (e) => handleImageUpload(e, 'logo'));
+    if (stampInput) stampInput.addEventListener('change', (e) => handleImageUpload(e, 'stamp'));
     
     // Gestion du drag & drop
     setupDragAndDrop('logoUploadArea', logoInput);
@@ -457,6 +627,7 @@ function setupImageUpload() {
 
 function setupDragAndDrop(areaId, inputElement) {
     const area = document.getElementById(areaId);
+    if (!area || !inputElement) return;
     
     area.addEventListener('dragover', (e) => {
         e.preventDefault();
@@ -508,11 +679,13 @@ function displayImagePreview(type, base64) {
     const previewId = type + 'Preview';
     const previewElement = document.getElementById(previewId);
     
-    previewElement.innerHTML = `
-        <img src="${base64}" alt="${type}" class="preview-image">
-        <p class="file-info">${type === 'logo' ? 'Logo chargé' : 'Cachet chargé'}</p>
-        <button class="remove-file" onclick="removeImage('${type}')">🗑️ Supprimer</button>
-    `;
+    if (previewElement) {
+        previewElement.innerHTML = `
+            <img src="${base64}" alt="${type}" class="preview-image">
+            <p class="file-info">${type === 'logo' ? 'Logo chargé' : 'Cachet chargé'}</p>
+            <button class="remove-file" onclick="removeImage('${type}')">🗑️ Supprimer</button>
+        `;
+    }
 }
 
 function removeImage(type) {
@@ -520,10 +693,12 @@ function removeImage(type) {
     const previewId = type + 'Preview';
     const previewElement = document.getElementById(previewId);
     
-    previewElement.innerHTML = `
-        <p>📁 Cliquez ici pour ajouter votre ${type === 'logo' ? 'logo' : 'cachet'}</p>
-        <p class="file-info">Format recommandé: PNG, JPG (max 2MB)</p>
-    `;
+    if (previewElement) {
+        previewElement.innerHTML = `
+            <p>📁 Cliquez ici pour ajouter votre ${type === 'logo' ? 'logo' : 'cachet'}</p>
+            <p class="file-info">Format recommandé: PNG, JPG (max 2MB)</p>
+        `;
+    }
     
     saveCompanySettings(); // Sauvegarde automatique
     showAlert(`${type === 'logo' ? 'Logo' : 'Cachet'} supprimé`, 'success');
@@ -604,62 +779,266 @@ async function importFullData(data) {
 }
 
 function resetSettings() {
-    if (confirm('Êtes-vous sûr de vouloir réinitialiser tous les paramètres ?')) {
-        companySettings = {
-            name: '',
-            siret: '',
-            address: '',
-            phone: '',
-            email: '',
-            website: '',
-            logo: null,
-            stamp: null,
-            taxRate: 20,
-            currency: 'dhs',
-            paymentTerms: '',
-            defaultNotes: ''
-        };
-        
-        saveCompanySettings();
-        loadCompanySettings();
-        showAlert('Paramètres réinitialisés', 'success');
+    if (confirm('⚠️ ATTENTION ⚠️\n\nÊtes-vous sûr de vouloir réinitialiser TOUS les paramètres de l\'entreprise ?\n\nCette action supprimera :\n- Toutes les informations de l\'entreprise\n- Le logo et le cachet\n- Les préférences de documents\n\nCette action est IRRÉVERSIBLE !')) {
+        if (confirm('Dernière confirmation :\n\nVoulez-vous vraiment TOUT effacer ?')) {
+            // Réinitialisation complète
+            companySettings = {
+                name: '',
+                siret: '',
+                address: '',
+                phone: '',
+                email: '',
+                website: '',
+                logo: null,
+                stamp: null,
+                taxRate: 20,
+                currency: 'dhs',
+                paymentTerms: '',
+                defaultNotes: ''
+            };
+            
+            // Sauvegarder la réinitialisation
+            saveCompanySettings();
+            
+            // Vider les champs du formulaire
+            updateSettingsFormFields();
+            
+            // Réinitialiser les previews des images
+            const logoPreview = document.getElementById('logoPreview');
+            const stampPreview = document.getElementById('stampPreview');
+            
+            if (logoPreview) {
+                logoPreview.innerHTML = `
+                    <p>📁 Cliquez ici pour ajouter votre logo</p>
+                    <p class="file-info">Format recommandé: PNG, JPG (max 2MB)</p>
+                `;
+            }
+            
+            if (stampPreview) {
+                stampPreview.innerHTML = `
+                    <p>📁 Cliquez ici pour ajouter votre cachet</p>
+                    <p class="file-info">Format recommandé: PNG avec fond transparent (max 2MB)</p>
+                `;
+            }
+            
+            showAlert('Tous les paramètres ont été réinitialisés', 'success');
+        }
     }
 }
 
-// Mise à jour du tableau de bord
+// Variables globales pour les filtres
+let dashboardFilters = {
+    dateStart: null,
+    dateEnd: null,
+    clientId: null,
+    paymentStatus: null,
+    documentType: null,
+    minAmount: null,
+    maxAmount: null
+};
+
+// Mise à jour du tableau de bord avec filtres
 function updateDashboard() {
-    document.getElementById('totalClients').textContent = clients.length;
-    document.getElementById('totalQuotes').textContent = quotes.length;
-    document.getElementById('totalInvoices').textContent = invoices.length;
-    
-    const revenue = invoices.reduce((sum, invoice) => sum + (invoice.totalTTC || 0), 0);
-    document.getElementById('totalRevenue').textContent = revenue.toFixed(2) + ' dhs';
-    
-    checkStockAlerts();
-    updateSalesChart();
-    updateClientChart();
-    updateInvoiceStatusChart();
-    displayRecentActivities();
+    populateFilterSelects();
+    applyDashboardFilters();
 }
 
-function checkStockAlerts() {
-    const lowStockProducts = products.filter(p => p.stock <= p.alertThreshold);
-    const alertPanel = document.getElementById('stockAlerts');
-    const alertContainer = document.getElementById('lowStockItems');
-    
-    if (lowStockProducts.length > 0) {
-        alertPanel.style.display = 'block';
-        alertContainer.innerHTML = lowStockProducts.map(product => 
-            `<div class="alert-item">
-                <strong>${product.name}</strong> - Stock: ${product.stock} (Seuil: ${product.alertThreshold})
-            </div>`
-        ).join('');
-    } else {
-        alertPanel.style.display = 'none';
+// Peupler les selects des filtres
+function populateFilterSelects() {
+    const clientSelect = document.getElementById('filterClient');
+    if (clientSelect) {
+        clientSelect.innerHTML = '<option value="">Tous les clients</option>';
+        
+        clients.forEach(client => {
+            const option = document.createElement('option');
+            option.value = client.id;
+            option.textContent = client.name;
+            clientSelect.appendChild(option);
+        });
     }
 }
 
-function updateSalesChart() {
+// Appliquer les filtres du tableau de bord
+function applyDashboardFilters() {
+    // Récupérer les valeurs des filtres
+    const filterDateStart = document.getElementById('filterDateStart');
+    const filterDateEnd = document.getElementById('filterDateEnd');
+    const filterClient = document.getElementById('filterClient');
+    const filterPaymentStatus = document.getElementById('filterPaymentStatus');
+    const filterDocumentType = document.getElementById('filterDocumentType');
+    const filterMinAmount = document.getElementById('filterMinAmount');
+    const filterMaxAmount = document.getElementById('filterMaxAmount');
+    
+    dashboardFilters.dateStart = filterDateStart ? filterDateStart.value || null : null;
+    dashboardFilters.dateEnd = filterDateEnd ? filterDateEnd.value || null : null;
+    dashboardFilters.clientId = filterClient ? filterClient.value || null : null;
+    dashboardFilters.paymentStatus = filterPaymentStatus ? filterPaymentStatus.value || null : null;
+    dashboardFilters.documentType = filterDocumentType ? filterDocumentType.value || null : null;
+    dashboardFilters.minAmount = filterMinAmount ? parseFloat(filterMinAmount.value) || null : null;
+    dashboardFilters.maxAmount = filterMaxAmount ? parseFloat(filterMaxAmount.value) || null : null;
+    
+    // Filtrer les données
+    const filteredData = getFilteredData();
+    
+    // Mettre à jour les statistiques
+    updateFilteredStats(filteredData);
+    
+    // Mettre à jour les graphiques
+    updateFilteredCharts(filteredData);
+    
+    // Mettre à jour les activités récentes
+    displayFilteredRecentActivities(filteredData);
+    
+    // Vérifier les alertes de stock (toujours affiché)
+    checkStockAlerts();
+}
+
+// Obtenir les données filtrées
+function getFilteredData() {
+    let filteredQuotes = [...quotes];
+    let filteredInvoices = [...invoices];
+    let filteredOrders = [...orders];
+    let filteredDeliveries = [...deliveries];
+    let filteredPayments = [...payments];
+    
+    // Filtrer par date
+    if (dashboardFilters.dateStart || dashboardFilters.dateEnd) {
+        const startDate = dashboardFilters.dateStart ? new Date(dashboardFilters.dateStart) : new Date('1900-01-01');
+        const endDate = dashboardFilters.dateEnd ? new Date(dashboardFilters.dateEnd) : new Date('2100-12-31');
+        
+        filteredQuotes = filteredQuotes.filter(item => {
+            const itemDate = new Date(item.date);
+            return itemDate >= startDate && itemDate <= endDate;
+        });
+        
+        filteredInvoices = filteredInvoices.filter(item => {
+            const itemDate = new Date(item.date);
+            return itemDate >= startDate && itemDate <= endDate;
+        });
+        
+        filteredOrders = filteredOrders.filter(item => {
+            const itemDate = new Date(item.date);
+            return itemDate >= startDate && itemDate <= endDate;
+        });
+        
+        filteredDeliveries = filteredDeliveries.filter(item => {
+            const itemDate = new Date(item.date);
+            return itemDate >= startDate && itemDate <= endDate;
+        });
+        
+        filteredPayments = filteredPayments.filter(item => {
+            const itemDate = new Date(item.date);
+            return itemDate >= startDate && itemDate <= endDate;
+        });
+    }
+    
+    // Filtrer par client
+    if (dashboardFilters.clientId) {
+        filteredQuotes = filteredQuotes.filter(item => item.clientId === dashboardFilters.clientId);
+        filteredInvoices = filteredInvoices.filter(item => item.clientId === dashboardFilters.clientId);
+        filteredDeliveries = filteredDeliveries.filter(item => item.clientId === dashboardFilters.clientId);
+        filteredOrders = filteredOrders.filter(item => item.supplierId === dashboardFilters.clientId);
+        filteredPayments = filteredPayments.filter(item => item.partnerId === dashboardFilters.clientId);
+    }
+    
+    // Filtrer par statut de paiement (factures seulement)
+    if (dashboardFilters.paymentStatus) {
+        filteredInvoices = filteredInvoices.filter(invoice => {
+            const status = invoice.paymentStatus || calculateInvoicePaymentStatus(invoice);
+            return status === dashboardFilters.paymentStatus;
+        });
+    }
+    
+    // Filtrer par montant
+    if (dashboardFilters.minAmount !== null || dashboardFilters.maxAmount !== null) {
+        const minAmount = dashboardFilters.minAmount || 0;
+        const maxAmount = dashboardFilters.maxAmount || Infinity;
+        
+        filteredQuotes = filteredQuotes.filter(item => 
+            item.totalTTC >= minAmount && item.totalTTC <= maxAmount
+        );
+        filteredInvoices = filteredInvoices.filter(item => 
+            item.totalTTC >= minAmount && item.totalTTC <= maxAmount
+        );
+        filteredOrders = filteredOrders.filter(item => 
+            item.totalTTC >= minAmount && item.totalTTC <= maxAmount
+        );
+        filteredPayments = filteredPayments.filter(item => 
+            item.amount >= minAmount && item.amount <= maxAmount
+        );
+    }
+    
+    // Filtrer par type de document
+    if (dashboardFilters.documentType) {
+        switch (dashboardFilters.documentType) {
+            case 'quotes':
+                filteredInvoices = [];
+                filteredOrders = [];
+                filteredDeliveries = [];
+                filteredPayments = [];
+                break;
+            case 'invoices':
+                filteredQuotes = [];
+                filteredOrders = [];
+                filteredDeliveries = [];
+                break;
+            case 'orders':
+                filteredQuotes = [];
+                filteredInvoices = [];
+                filteredDeliveries = [];
+                filteredPayments = [];
+                break;
+            case 'deliveries':
+                filteredQuotes = [];
+                filteredInvoices = [];
+                filteredOrders = [];
+                filteredPayments = [];
+                break;
+        }
+    }
+    
+    return {
+        quotes: filteredQuotes,
+        invoices: filteredInvoices,
+        orders: filteredOrders,
+        deliveries: filteredDeliveries,
+        payments: filteredPayments
+    };
+}
+
+// Mettre à jour les statistiques filtrées
+function updateFilteredStats(filteredData) {
+    const uniqueClients = new Set();
+    
+    // Compter les clients uniques
+    filteredData.quotes.forEach(q => q.clientId && uniqueClients.add(q.clientId));
+    filteredData.invoices.forEach(i => i.clientId && uniqueClients.add(i.clientId));
+    filteredData.orders.forEach(o => o.supplierId && uniqueClients.add(o.supplierId));
+    filteredData.deliveries.forEach(d => d.clientId && uniqueClients.add(d.clientId));
+    
+    // Calculer le chiffre d'affaires filtré
+    const revenue = filteredData.invoices.reduce((sum, invoice) => sum + (invoice.totalTTC || 0), 0);
+    
+    // Mettre à jour les éléments
+    const totalClientsElement = document.getElementById('totalClients');
+    const totalQuotesElement = document.getElementById('totalQuotes');
+    const totalInvoicesElement = document.getElementById('totalInvoices');
+    const totalRevenueElement = document.getElementById('totalRevenue');
+    
+    if (totalClientsElement) totalClientsElement.textContent = uniqueClients.size;
+    if (totalQuotesElement) totalQuotesElement.textContent = filteredData.quotes.length;
+    if (totalInvoicesElement) totalInvoicesElement.textContent = filteredData.invoices.length;
+    if (totalRevenueElement) totalRevenueElement.textContent = revenue.toFixed(2) + ' dhs';
+}
+
+// Mettre à jour les graphiques filtrés
+function updateFilteredCharts(filteredData) {
+    updateFilteredSalesChart(filteredData.invoices);
+    updateFilteredClientChart(filteredData.invoices);
+    updateFilteredInvoiceStatusChart(filteredData.invoices);
+}
+
+function updateFilteredSalesChart(filteredInvoices) {
     const ctx = document.getElementById('salesChart');
     if (!ctx) return;
     
@@ -669,14 +1048,27 @@ function updateSalesChart() {
     
     const months = [];
     const salesData = [];
-    const now = new Date();
     
-    for (let i = 5; i >= 0; i--) {
-        const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const monthName = date.toLocaleDateString('fr-FR', { month: 'short' });
+    // Déterminer la plage de dates
+    let startDate, endDate;
+    if (dashboardFilters.dateStart || dashboardFilters.dateEnd) {
+        startDate = dashboardFilters.dateStart ? new Date(dashboardFilters.dateStart) : new Date('1900-01-01');
+        endDate = dashboardFilters.dateEnd ? new Date(dashboardFilters.dateEnd) : new Date();
+    } else {
+        endDate = new Date();
+        startDate = new Date(endDate.getFullYear(), endDate.getMonth() - 5, 1);
+    }
+    
+    // Générer les données par mois
+    const monthsDiff = (endDate.getFullYear() - startDate.getFullYear()) * 12 + endDate.getMonth() - startDate.getMonth();
+    const monthsToShow = Math.min(monthsDiff + 1, 12); // Maximum 12 mois
+    
+    for (let i = monthsToShow - 1; i >= 0; i--) {
+        const date = new Date(endDate.getFullYear(), endDate.getMonth() - i, 1);
+        const monthName = date.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
         months.push(monthName);
         
-        const monthSales = invoices
+        const monthSales = filteredInvoices
             .filter(invoice => {
                 const invoiceDate = new Date(invoice.date);
                 return invoiceDate.getMonth() === date.getMonth() && 
@@ -717,7 +1109,7 @@ function updateSalesChart() {
     });
 }
 
-function updateClientChart() {
+function updateFilteredClientChart(filteredInvoices) {
     const ctx = document.getElementById('clientChart');
     if (!ctx) return;
     
@@ -726,7 +1118,7 @@ function updateClientChart() {
     }
     
     const clientRevenues = {};
-    invoices.forEach(invoice => {
+    filteredInvoices.forEach(invoice => {
         const client = clients.find(c => c.id === invoice.clientId);
         const clientName = client ? client.name : 'Client supprimé';
         clientRevenues[clientName] = (clientRevenues[clientName] || 0) + invoice.totalTTC;
@@ -767,7 +1159,7 @@ function updateClientChart() {
     });
 }
 
-function updateInvoiceStatusChart() {
+function updateFilteredInvoiceStatusChart(filteredInvoices) {
     const ctx = document.getElementById('invoiceStatusChart');
     if (!ctx) return;
     
@@ -781,8 +1173,9 @@ function updateInvoiceStatusChart() {
         'partiellement-payee': 0
     };
     
-    invoices.forEach(invoice => {
-        statusCount[invoice.paymentStatus] = (statusCount[invoice.paymentStatus] || 0) + 1;
+    filteredInvoices.forEach(invoice => {
+        const status = invoice.paymentStatus || calculateInvoicePaymentStatus(invoice);
+        statusCount[status] = (statusCount[status] || 0) + 1;
     });
     
     invoiceStatusChart = new Chart(ctx, {
@@ -810,13 +1203,14 @@ function updateInvoiceStatusChart() {
     });
 }
 
-function displayRecentActivities() {
+// Afficher les activités récentes filtrées
+function displayFilteredRecentActivities(filteredData) {
     const container = document.querySelector('#recentActivities .activity-list');
     if (!container) return;
     
     const activities = [];
     
-    quotes.slice(-3).forEach(quote => {
+    filteredData.quotes.slice(-3).forEach(quote => {
         const client = clients.find(c => c.id === quote.clientId);
         activities.push({
             type: 'quote',
@@ -828,7 +1222,7 @@ function displayRecentActivities() {
         });
     });
     
-    invoices.slice(-3).forEach(invoice => {
+    filteredData.invoices.slice(-3).forEach(invoice => {
         const client = clients.find(c => c.id === invoice.clientId);
         activities.push({
             type: 'invoice',
@@ -840,7 +1234,7 @@ function displayRecentActivities() {
         });
     });
     
-    payments.slice(-2).forEach(payment => {
+    filteredData.payments.slice(-2).forEach(payment => {
         const partner = clients.find(c => c.id === payment.partnerId);
         activities.push({
             type: 'payment',
@@ -852,7 +1246,7 @@ function displayRecentActivities() {
         });
     });
 
-    deliveries.slice(-2).forEach(delivery => {
+    filteredData.deliveries.slice(-2).forEach(delivery => {
         const client = clients.find(c => c.id === delivery.clientId);
         activities.push({
             type: 'delivery',
@@ -867,7 +1261,7 @@ function displayRecentActivities() {
     activities.sort((a, b) => b.date - a.date);
     
     if (activities.length === 0) {
-        container.innerHTML = '<div class="empty-state">Aucune activité récente</div>';
+        container.innerHTML = '<div class="empty-state">Aucune activité récente pour les filtres sélectionnés</div>';
         return;
     }
     
@@ -881,6 +1275,81 @@ function displayRecentActivities() {
             <div class="activity-time">${activity.time}</div>
         </div>
     `).join('');
+}
+
+// Réinitialiser les filtres du tableau de bord
+function resetDashboardFilters() {
+    const filterDateStart = document.getElementById('filterDateStart');
+    const filterDateEnd = document.getElementById('filterDateEnd');
+    const filterClient = document.getElementById('filterClient');
+    const filterPaymentStatus = document.getElementById('filterPaymentStatus');
+    const filterDocumentType = document.getElementById('filterDocumentType');
+    const filterMinAmount = document.getElementById('filterMinAmount');
+    const filterMaxAmount = document.getElementById('filterMaxAmount');
+    
+    if (filterDateStart) filterDateStart.value = '';
+    if (filterDateEnd) filterDateEnd.value = '';
+    if (filterClient) filterClient.value = '';
+    if (filterPaymentStatus) filterPaymentStatus.value = '';
+    if (filterDocumentType) filterDocumentType.value = '';
+    if (filterMinAmount) filterMinAmount.value = '';
+    if (filterMaxAmount) filterMaxAmount.value = '';
+    
+    // Réinitialiser l'objet des filtres
+    dashboardFilters = {
+        dateStart: null,
+        dateEnd: null,
+        clientId: null,
+        paymentStatus: null,
+        documentType: null,
+        minAmount: null,
+        maxAmount: null
+    };
+    
+    // Rafraîchir le tableau de bord
+    applyDashboardFilters();
+}
+
+function checkStockAlerts() {
+    const lowStockProducts = products.filter(p => p.stock <= p.alertThreshold);
+    const alertPanel = document.getElementById('stockAlerts');
+    const alertContainer = document.getElementById('lowStockItems');
+    
+    if (alertPanel && alertContainer) {
+        if (lowStockProducts.length > 0) {
+            alertPanel.style.display = 'block';
+            alertContainer.innerHTML = lowStockProducts.map(product => 
+                `<div class="alert-item">
+                    <strong>${product.name}</strong> - Stock: ${product.stock} (Seuil: ${product.alertThreshold})
+                </div>`
+            ).join('');
+        } else {
+            alertPanel.style.display = 'none';
+        }
+    }
+}
+
+function updateSalesChart() {
+    updateFilteredSalesChart(invoices);
+}
+
+function updateClientChart() {
+    updateFilteredClientChart(invoices);
+}
+
+function updateInvoiceStatusChart() {
+    updateFilteredInvoiceStatusChart(invoices);
+}
+
+function displayRecentActivities() {
+    const allData = {
+        quotes: quotes,
+        invoices: invoices,
+        orders: orders,
+        deliveries: deliveries,
+        payments: payments
+    };
+    displayFilteredRecentActivities(allData);
 }
 
 // Fonctions de gestion des statuts de paiement et de livraison
@@ -950,11 +1419,17 @@ function markInvoiceAsPaid(invoiceId) {
     
     if (remainingAmount > 0) {
         openPaymentModal();
-        document.getElementById('paymentAmount').value = remainingAmount.toFixed(2);
-        document.getElementById('paymentInvoice').value = invoiceId;
-        document.getElementById('paymentPartner').value = invoice.clientId;
-        document.getElementById('paymentType').value = 'recu';
-        document.getElementById('paymentDate').value = new Date().toISOString().split('T')[0];
+        const paymentAmount = document.getElementById('paymentAmount');
+        const paymentInvoice = document.getElementById('paymentInvoice');
+        const paymentPartner = document.getElementById('paymentPartner');
+        const paymentType = document.getElementById('paymentType');
+        const paymentDate = document.getElementById('paymentDate');
+        
+        if (paymentAmount) paymentAmount.value = remainingAmount.toFixed(2);
+        if (paymentInvoice) paymentInvoice.value = invoiceId;
+        if (paymentPartner) paymentPartner.value = invoice.clientId;
+        if (paymentType) paymentType.value = 'recu';
+        if (paymentDate) paymentDate.value = new Date().toISOString().split('T')[0];
     }
 }
 
@@ -964,31 +1439,41 @@ function markInvoiceAsDelivered(invoiceId) {
     
     // Créer une livraison automatique
     openDeliveryModal();
-    document.getElementById('deliveryInvoice').value = invoiceId;
-    document.getElementById('deliveryClient').value = invoice.clientId;
-    document.getElementById('deliveryStatus').value = 'livree';
-    document.getElementById('deliveryDate').value = new Date().toISOString().split('T')[0];
+    
+    const deliveryInvoice = document.getElementById('deliveryInvoice');
+    const deliveryClient = document.getElementById('deliveryClient');
+    const deliveryStatus = document.getElementById('deliveryStatus');
+    const deliveryDate = document.getElementById('deliveryDate');
+    
+    if (deliveryInvoice) deliveryInvoice.value = invoiceId;
+    if (deliveryClient) deliveryClient.value = invoice.clientId;
+    if (deliveryStatus) deliveryStatus.value = 'livree';
+    if (deliveryDate) deliveryDate.value = new Date().toISOString().split('T')[0];
     
     // Copier les lignes de la facture
     const container = document.getElementById('deliveryLines');
-    container.innerHTML = '';
-    
-    invoice.lines.forEach(line => {
-        const newLine = document.createElement('div');
-        newLine.className = 'line-item';
-        newLine.innerHTML = `
-            <input type="text" placeholder="Description" class="line-description" value="${line.description}">
-            <input type="number" placeholder="Qté livrée" class="line-quantity" step="0.01" value="${line.quantity}">
-            <input type="text" placeholder="Référence" class="line-reference" value="">
-            <button type="button" onclick="removeLine(this)">🗑️</button>
-        `;
-        container.appendChild(newLine);
-    });
+    if (container) {
+        container.innerHTML = '';
+        
+        invoice.lines.forEach(line => {
+            const newLine = document.createElement('div');
+            newLine.className = 'line-item';
+            newLine.innerHTML = `
+                <input type="text" placeholder="Description" class="line-description" value="${line.description}">
+                <input type="number" placeholder="Qté livrée" class="line-quantity" step="0.01" value="${line.quantity}">
+                <input type="text" placeholder="Référence" class="line-reference" value="">
+                <button type="button" onclick="removeLine(this)">🗑️</button>
+            `;
+            container.appendChild(newLine);
+        });
+    }
 }
 
 // Affichage des devis avec statuts de validité
 function displayQuotes() {
     const tbody = document.getElementById('quotesTableBody');
+    if (!tbody) return;
+    
     tbody.innerHTML = '';
     
     if (quotes.length === 0) {
@@ -1030,6 +1515,8 @@ function displayQuotes() {
 // Affichage des factures avec statuts de paiement et livraison
 function displayInvoices() {
     const tbody = document.getElementById('invoicesTableBody');
+    if (!tbody) return;
+    
     tbody.innerHTML = '';
     
     if (invoices.length === 0) {
@@ -1083,6 +1570,8 @@ function displayInvoices() {
 // Affichage des paiements avec factures liées
 function displayPayments() {
     const tbody = document.getElementById('paymentsTableBody');
+    if (!tbody) return;
+    
     tbody.innerHTML = '';
     
     if (payments.length === 0) {
@@ -1114,6 +1603,8 @@ function displayPayments() {
 // Affichage des livraisons avec statuts
 function displayDeliveries() {
     const tbody = document.getElementById('deliveriesTableBody');
+    if (!tbody) return;
+    
     tbody.innerHTML = '';
     
     if (deliveries.length === 0) {
@@ -1175,6 +1666,8 @@ async function updateDeliveryStatus(deliveryId, newStatus) {
 // Gestion des clients
 function displayClients() {
     const tbody = document.getElementById('clientsTableBody');
+    if (!tbody) return;
+    
     tbody.innerHTML = '';
     
     if (clients.length === 0) {
@@ -1204,19 +1697,28 @@ function openClientModal(clientId = null) {
     if (clientId) {
         const client = clients.find(c => c.id === clientId);
         if (client) {
-            document.getElementById('clientName').value = client.name;
-            document.getElementById('clientType').value = client.type;
-            document.getElementById('clientEmail').value = client.email || '';
-            document.getElementById('clientPhone').value = client.phone || '';
-            document.getElementById('clientAddress').value = client.address || '';
-            document.getElementById('clientSiret').value = client.siret || '';
-            document.getElementById('clientVat').value = client.vat || '';
+            const clientName = document.getElementById('clientName');
+            const clientType = document.getElementById('clientType');
+            const clientEmail = document.getElementById('clientEmail');
+            const clientPhone = document.getElementById('clientPhone');
+            const clientAddress = document.getElementById('clientAddress');
+            const clientSiret = document.getElementById('clientSiret');
+            const clientVat = document.getElementById('clientVat');
+            
+            if (clientName) clientName.value = client.name;
+            if (clientType) clientType.value = client.type;
+            if (clientEmail) clientEmail.value = client.email || '';
+            if (clientPhone) clientPhone.value = client.phone || '';
+            if (clientAddress) clientAddress.value = client.address || '';
+            if (clientSiret) clientSiret.value = client.siret || '';
+            if (clientVat) clientVat.value = client.vat || '';
         }
     } else {
-        document.getElementById('clientForm').reset();
+        const clientForm = document.getElementById('clientForm');
+        if (clientForm) clientForm.reset();
     }
     
-    modal.style.display = 'block';
+    if (modal) modal.style.display = 'block';
 }
 
 function editClient(clientId) {
@@ -1239,32 +1741,42 @@ async function deleteClient(clientId) {
 function openQuoteModal(quoteId = null) {
     currentEditId = quoteId;
     const modal = document.getElementById('quoteModal');
-    document.getElementById('quoteForm').reset();
+    const quoteForm = document.getElementById('quoteForm');
+    
+    if (quoteForm) quoteForm.reset();
     
     if (quoteId) {
         // TODO: Logique d'édition
     } else {
         const quoteNumber = getNextDocumentNumber('DEV', quotes);
-        document.getElementById('quoteNumber').value = quoteNumber;
-        document.getElementById('quoteDate').valueAsDate = new Date();
+        const quoteNumberField = document.getElementById('quoteNumber');
+        const quoteDateField = document.getElementById('quoteDate');
+        const quoteValidityField = document.getElementById('quoteValidity');
+        const customValidityGroup = document.getElementById('customValidityGroup');
+        const quoteValidityDateField = document.getElementById('quoteValidityDate');
+        
+        if (quoteNumberField) quoteNumberField.value = quoteNumber;
+        if (quoteDateField) quoteDateField.valueAsDate = new Date();
         
         // Réinitialiser la validité par défaut
-        document.getElementById('quoteValidity').value = '30';
-        document.getElementById('customValidityGroup').style.display = 'none';
+        if (quoteValidityField) quoteValidityField.value = '30';
+        if (customValidityGroup) customValidityGroup.style.display = 'none';
         
         // Calculer la date de validité par défaut (30 jours)
         const validityDate = new Date();
         validityDate.setDate(validityDate.getDate() + 30);
-        document.getElementById('quoteValidityDate').value = validityDate.toISOString().split('T')[0];
+        if (quoteValidityDateField) quoteValidityDateField.value = validityDate.toISOString().split('T')[0];
         
         resetQuoteLines();
     }
     
-    modal.style.display = 'block';
+    if (modal) modal.style.display = 'block';
 }
 
 function addQuoteLine() {
     const container = document.getElementById('quoteLines');
+    if (!container) return;
+    
     const newLine = document.createElement('div');
     newLine.className = 'line-item';
     newLine.innerHTML = `
@@ -1279,12 +1791,18 @@ function addQuoteLine() {
     const quantityInput = newLine.querySelector('.line-quantity');
     const priceInput = newLine.querySelector('.line-price');
     
-    quantityInput.addEventListener('input', () => calculateAllTotals('quote'));
-    priceInput.addEventListener('input', () => calculateAllTotals('quote'));
+    if (quantityInput) quantityInput.addEventListener('input', () => calculateAllTotals('quote'));
+    if (priceInput) priceInput.addEventListener('input', () => calculateAllTotals('quote'));
 }
 
 function removeLine(button) {
-    const formId = button.closest('form').id.replace('Form','');
+    const form = button.closest('form');
+    let formId = 'quote'; // valeur par défaut
+    
+    if (form) {
+        formId = form.id.replace('Form','');
+    }
+    
     button.parentElement.remove();
     calculateAllTotals(formId);
 }
@@ -1297,7 +1815,8 @@ function calculateAllTotals(prefix) {
         const quantity = parseFloat(line.querySelector('.line-quantity').value) || 0;
         const price = parseFloat(line.querySelector('.line-price').value) || 0;
         const total = quantity * price;
-        line.querySelector('.line-total').value = total.toFixed(2);
+        const totalField = line.querySelector('.line-total');
+        if (totalField) totalField.value = total.toFixed(2);
         subtotal += total;
     });
     
@@ -1306,16 +1825,22 @@ function calculateAllTotals(prefix) {
     const totalTTC = subtotal + tax;
     const currency = companySettings.currency || 'dhs';
     
-    document.getElementById(`${prefix}Subtotal`).textContent = subtotal.toFixed(2) + ' ' + currency;
-    document.getElementById(`${prefix}Tax`).textContent = tax.toFixed(2) + ' ' + currency;
-    document.getElementById(`${prefix}Total`).textContent = totalTTC.toFixed(2) + ' ' + currency;
+    const subtotalElement = document.getElementById(`${prefix}Subtotal`);
+    const taxElement = document.getElementById(`${prefix}Tax`);
+    const totalElement = document.getElementById(`${prefix}Total`);
+    
+    if (subtotalElement) subtotalElement.textContent = subtotal.toFixed(2) + ' ' + currency;
+    if (taxElement) taxElement.textContent = tax.toFixed(2) + ' ' + currency;
+    if (totalElement) totalElement.textContent = totalTTC.toFixed(2) + ' ' + currency;
 }
 
 function resetQuoteLines() {
     const container = document.getElementById('quoteLines');
-    container.innerHTML = ``;
-    addQuoteLine();
-    calculateAllTotals('quote');
+    if (container) {
+        container.innerHTML = ``;
+        addQuoteLine();
+        calculateAllTotals('quote');
+    }
 }
 
 // Conversion de documents
@@ -1326,11 +1851,16 @@ function convertQuoteToInvoice(quoteId) {
     openInvoiceModal();
     
     const invoiceNumber = getNextDocumentNumber('FAC', invoices);
-    document.getElementById('invoiceNumber').value = invoiceNumber;
-    document.getElementById('invoiceClient').value = quote.clientId;
-    document.getElementById('fromQuote').value = quoteId;
+    const invoiceNumberField = document.getElementById('invoiceNumber');
+    const invoiceClientField = document.getElementById('invoiceClient');
+    const fromQuoteField = document.getElementById('fromQuote');
     
-    document.getElementById('fromQuote').dispatchEvent(new Event('change'));
+    if (invoiceNumberField) invoiceNumberField.value = invoiceNumber;
+    if (invoiceClientField) invoiceClientField.value = quote.clientId;
+    if (fromQuoteField) {
+        fromQuoteField.value = quoteId;
+        fromQuoteField.dispatchEvent(new Event('change'));
+    }
     
     showAlert('Devis chargé dans la nouvelle facture', 'success');
 }
@@ -1342,23 +1872,28 @@ function convertQuoteToDelivery(quoteId) {
     openDeliveryModal();
     
     const deliveryNumber = getNextDocumentNumber('BL', deliveries);
-    document.getElementById('deliveryNumber').value = deliveryNumber;
-    document.getElementById('deliveryClient').value = quote.clientId;
+    const deliveryNumberField = document.getElementById('deliveryNumber');
+    const deliveryClientField = document.getElementById('deliveryClient');
+    
+    if (deliveryNumberField) deliveryNumberField.value = deliveryNumber;
+    if (deliveryClientField) deliveryClientField.value = quote.clientId;
     
     const container = document.getElementById('deliveryLines');
-    container.innerHTML = '';
-    
-    quote.lines.forEach(line => {
-        const newLine = document.createElement('div');
-        newLine.className = 'line-item';
-        newLine.innerHTML = `
-            <input type="text" placeholder="Description" class="line-description" value="${line.description}">
-            <input type="number" placeholder="Qté livrée" class="line-quantity" step="0.01" value="${line.quantity}">
-            <input type="text" placeholder="Référence" class="line-reference" value="">
-            <button type="button" onclick="removeLine(this)">🗑️</button>
-        `;
-        container.appendChild(newLine);
-    });
+    if (container) {
+        container.innerHTML = '';
+        
+        quote.lines.forEach(line => {
+            const newLine = document.createElement('div');
+            newLine.className = 'line-item';
+            newLine.innerHTML = `
+                <input type="text" placeholder="Description" class="line-description" value="${line.description}">
+                <input type="number" placeholder="Qté livrée" class="line-quantity" step="0.01" value="${line.quantity}">
+                <input type="text" placeholder="Référence" class="line-reference" value="">
+                <button type="button" onclick="removeLine(this)">🗑️</button>
+            `;
+            container.appendChild(newLine);
+        });
+    }
     
     showAlert('Devis chargé dans le nouveau bon de livraison', 'success');
 }
@@ -1366,6 +1901,8 @@ function convertQuoteToDelivery(quoteId) {
 // Gestion des bons de commande
 function displayOrders() {
     const tbody = document.getElementById('ordersTableBody');
+    if (!tbody) return;
+    
     tbody.innerHTML = '';
     
     if (orders.length === 0) {
@@ -1404,33 +1941,43 @@ function displayOrders() {
 function openOrderModal(orderId = null) {
     currentEditId = orderId;
     const modal = document.getElementById('orderModal');
-    document.getElementById('orderForm').reset();
+    const orderForm = document.getElementById('orderForm');
+    
+    if (orderForm) orderForm.reset();
     
     if (orderId) {
         // TODO: Logique d'édition
     } else {
         const orderNumber = getNextDocumentNumber('BC', orders);
-        document.getElementById('orderNumber').value = orderNumber;
-        document.getElementById('orderDate').valueAsDate = new Date();
+        const orderNumberField = document.getElementById('orderNumber');
+        const orderDateField = document.getElementById('orderDate');
+        const orderValidityField = document.getElementById('orderValidity');
+        const customOrderValidityGroup = document.getElementById('customOrderValidityGroup');
+        const orderValidityDateField = document.getElementById('orderValidityDate');
+        
+        if (orderNumberField) orderNumberField.value = orderNumber;
+        if (orderDateField) orderDateField.valueAsDate = new Date();
         
         // Réinitialiser la validité par défaut
-        document.getElementById('orderValidity').value = '30';
-        document.getElementById('customOrderValidityGroup').style.display = 'none';
+        if (orderValidityField) orderValidityField.value = '30';
+        if (customOrderValidityGroup) customOrderValidityGroup.style.display = 'none';
         
         // Calculer la date de validité par défaut (30 jours)
         const validityDate = new Date();
         validityDate.setDate(validityDate.getDate() + 30);
-        document.getElementById('orderValidityDate').value = validityDate.toISOString().split('T')[0];
+        if (orderValidityDateField) orderValidityDateField.value = validityDate.toISOString().split('T')[0];
         
         resetOrderLines();
         populateSupplierSelect();
     }
     
-    modal.style.display = 'block';
+    if (modal) modal.style.display = 'block';
 }
 
 function populateSupplierSelect() {
     const supplierSelect = document.getElementById('orderSupplier');
+    if (!supplierSelect) return;
+    
     supplierSelect.innerHTML = '<option value="">Sélectionner un fournisseur</option>';
     
     clients.filter(c => c.type === 'fournisseur' || c.type === 'les-deux').forEach(supplier => {
@@ -1443,6 +1990,8 @@ function populateSupplierSelect() {
 
 function addOrderLine() {
     const container = document.getElementById('orderLines');
+    if (!container) return;
+    
     const newLine = document.createElement('div');
     newLine.className = 'line-item';
     newLine.innerHTML = `
@@ -1457,47 +2006,59 @@ function addOrderLine() {
     const quantityInput = newLine.querySelector('.line-quantity');
     const priceInput = newLine.querySelector('.line-price');
     
-    quantityInput.addEventListener('input', () => calculateAllTotals('order'));
-    priceInput.addEventListener('input', () => calculateAllTotals('order'));
+    if (quantityInput) quantityInput.addEventListener('input', () => calculateAllTotals('order'));
+    if (priceInput) priceInput.addEventListener('input', () => calculateAllTotals('order'));
 }
 
 function resetOrderLines() {
     const container = document.getElementById('orderLines');
-    container.innerHTML = ``;
-    addOrderLine();
-    calculateAllTotals('order');
+    if (container) {
+        container.innerHTML = ``;
+        addOrderLine();
+        calculateAllTotals('order');
+    }
 }
 
 function openInvoiceModal(invoiceId = null) {
     currentEditId = invoiceId;
     const modal = document.getElementById('invoiceModal');
-    document.getElementById('invoiceForm').reset();
+    const invoiceForm = document.getElementById('invoiceForm');
+    
+    if (invoiceForm) invoiceForm.reset();
     
     if (invoiceId) {
         // TODO: Logique d'édition
     } else {
         const invoiceNumber = getNextDocumentNumber('FAC', invoices);
-        document.getElementById('invoiceNumber').value = invoiceNumber;
-        document.getElementById('invoiceDate').valueAsDate = new Date();
+        const invoiceNumberField = document.getElementById('invoiceNumber');
+        const invoiceDateField = document.getElementById('invoiceDate');
+        const invoicePaymentDueField = document.getElementById('invoicePaymentDue');
+        const customPaymentDueGroup = document.getElementById('customPaymentDueGroup');
+        const invoicePaymentDueDateField = document.getElementById('invoicePaymentDueDate');
+        
+        if (invoiceNumberField) invoiceNumberField.value = invoiceNumber;
+        if (invoiceDateField) invoiceDateField.valueAsDate = new Date();
         
         // Réinitialiser l'échéance par défaut
-        document.getElementById('invoicePaymentDue').value = '30';
-        document.getElementById('customPaymentDueGroup').style.display = 'none';
+        if (invoicePaymentDueField) invoicePaymentDueField.value = '30';
+        if (customPaymentDueGroup) customPaymentDueGroup.style.display = 'none';
         
         // Calculer la date d'échéance par défaut (30 jours)
         const dueDate = new Date();
         dueDate.setDate(dueDate.getDate() + 30);
-        document.getElementById('invoicePaymentDueDate').value = dueDate.toISOString().split('T')[0];
+        if (invoicePaymentDueDateField) invoicePaymentDueDateField.value = dueDate.toISOString().split('T')[0];
         
         resetInvoiceLines();
         populateQuoteSelect();
     }
     
-    modal.style.display = 'block';
+    if (modal) modal.style.display = 'block';
 }
 
 function populateQuoteSelect() {
     const quoteSelect = document.getElementById('fromQuote');
+    if (!quoteSelect) return;
+    
     quoteSelect.innerHTML = '<option value="">Nouvelle facture</option>';
     
     quotes.filter(q => q.status === 'accepte').forEach(quote => {
@@ -1511,6 +2072,8 @@ function populateQuoteSelect() {
 
 function addInvoiceLine() {
     const container = document.getElementById('invoiceLines');
+    if (!container) return;
+    
     const newLine = document.createElement('div');
     newLine.className = 'line-item';
     newLine.innerHTML = `
@@ -1525,37 +2088,47 @@ function addInvoiceLine() {
     const quantityInput = newLine.querySelector('.line-quantity');
     const priceInput = newLine.querySelector('.line-price');
     
-    quantityInput.addEventListener('input', () => calculateAllTotals('invoice'));
-    priceInput.addEventListener('input', () => calculateAllTotals('invoice'));
+    if (quantityInput) quantityInput.addEventListener('input', () => calculateAllTotals('invoice'));
+    if (priceInput) priceInput.addEventListener('input', () => calculateAllTotals('invoice'));
 }
 
 function resetInvoiceLines() {
     const container = document.getElementById('invoiceLines');
-    container.innerHTML = ``;
-    addInvoiceLine();
-    calculateAllTotals('invoice');
+    if (container) {
+        container.innerHTML = ``;
+        addInvoiceLine();
+        calculateAllTotals('invoice');
+    }
 }
 
 function openDeliveryModal(deliveryId = null) {
     currentEditId = deliveryId;
     const modal = document.getElementById('deliveryModal');
-    document.getElementById('deliveryForm').reset();
+    const deliveryForm = document.getElementById('deliveryForm');
+    
+    if (deliveryForm) deliveryForm.reset();
     
     if (deliveryId) {
         // TODO: Logique d'édition
     } else {
         const deliveryNumber = getNextDocumentNumber('BL', deliveries);
-        document.getElementById('deliveryNumber').value = deliveryNumber;
-        document.getElementById('deliveryDate').valueAsDate = new Date();
+        const deliveryNumberField = document.getElementById('deliveryNumber');
+        const deliveryDateField = document.getElementById('deliveryDate');
+        
+        if (deliveryNumberField) deliveryNumberField.value = deliveryNumber;
+        if (deliveryDateField) deliveryDateField.valueAsDate = new Date();
+        
         resetDeliveryLines();
         populateInvoiceSelect();
     }
     
-    modal.style.display = 'block';
+    if (modal) modal.style.display = 'block';
 }
 
 function populateInvoiceSelect() {
     const invoiceSelect = document.getElementById('deliveryInvoice');
+    if (!invoiceSelect) return;
+    
     invoiceSelect.innerHTML = '<option value="">Aucune facture liée</option>';
     
     invoices.forEach(invoice => {
@@ -1569,6 +2142,8 @@ function populateInvoiceSelect() {
 
 function addDeliveryLine() {
     const container = document.getElementById('deliveryLines');
+    if (!container) return;
+    
     const newLine = document.createElement('div');
     newLine.className = 'line-item';
     newLine.innerHTML = `
@@ -1582,26 +2157,32 @@ function addDeliveryLine() {
 
 function resetDeliveryLines() {
     const container = document.getElementById('deliveryLines');
-    container.innerHTML = ``;
-    addDeliveryLine();
+    if (container) {
+        container.innerHTML = ``;
+        addDeliveryLine();
+    }
 }
 
 function openPaymentModal(paymentId = null) {
     currentEditId = paymentId;
     const modal = document.getElementById('paymentModal');
+    const paymentForm = document.getElementById('paymentForm');
     
     if (!paymentId) {
-        document.getElementById('paymentDate').value = new Date().toISOString().split('T')[0];
-        document.getElementById('paymentForm').reset();
+        const paymentDateField = document.getElementById('paymentDate');
+        if (paymentDateField) paymentDateField.value = new Date().toISOString().split('T')[0];
+        if (paymentForm) paymentForm.reset();
         populatePaymentPartners();
         populatePaymentInvoices();
     }
     
-    modal.style.display = 'block';
+    if (modal) modal.style.display = 'block';
 }
 
 function populatePaymentPartners() {
     const partnerSelect = document.getElementById('paymentPartner');
+    if (!partnerSelect) return;
+    
     partnerSelect.innerHTML = '<option value="">Sélectionner</option>';
     
     clients.forEach(client => {
@@ -1614,6 +2195,8 @@ function populatePaymentPartners() {
 
 function populatePaymentInvoices() {
     const invoiceSelect = document.getElementById('paymentInvoice');
+    if (!invoiceSelect) return;
+    
     invoiceSelect.innerHTML = '<option value="">Aucune facture liée</option>';
     
     // Afficher seulement les factures impayées ou partiellement payées
@@ -1632,6 +2215,8 @@ function populatePaymentInvoices() {
 // Gestion des produits avec alertes de stock
 function displayStock() {
     const tbody = document.getElementById('stockTableBody');
+    if (!tbody) return;
+    
     tbody.innerHTML = '';
     
     if (products.length === 0) {
@@ -1666,21 +2251,34 @@ function openProductModal(productId = null) {
     if (productId) {
         const product = products.find(p => p.id === productId);
         if (product) {
-            document.getElementById('productRef').value = product.reference;
-            document.getElementById('productName').value = product.name;
-            document.getElementById('productBuyPrice').value = product.buyPrice || '';
-            document.getElementById('productSellPrice').value = product.sellPrice || '';
-            document.getElementById('productStock').value = product.stock;
-            document.getElementById('productAlert').value = product.alertThreshold;
-            document.getElementById('productDescription').value = product.description || '';
+            const productRefField = document.getElementById('productRef');
+            const productNameField = document.getElementById('productName');
+            const productBuyPriceField = document.getElementById('productBuyPrice');
+            const productSellPriceField = document.getElementById('productSellPrice');
+            const productStockField = document.getElementById('productStock');
+            const productAlertField = document.getElementById('productAlert');
+            const productDescriptionField = document.getElementById('productDescription');
+            
+            if (productRefField) productRefField.value = product.reference;
+            if (productNameField) productNameField.value = product.name;
+            if (productBuyPriceField) productBuyPriceField.value = product.buyPrice || '';
+            if (productSellPriceField) productSellPriceField.value = product.sellPrice || '';
+            if (productStockField) productStockField.value = product.stock;
+            if (productAlertField) productAlertField.value = product.alertThreshold;
+            if (productDescriptionField) productDescriptionField.value = product.description || '';
         }
     } else {
-        document.getElementById('productForm').reset();
-        document.getElementById('productStock').value = 0;
-        document.getElementById('productAlert').value = 5;
+        const productForm = document.getElementById('productForm');
+        if (productForm) productForm.reset();
+        
+        const productStockField = document.getElementById('productStock');
+        const productAlertField = document.getElementById('productAlert');
+        
+        if (productStockField) productStockField.value = 0;
+        if (productAlertField) productAlertField.value = 5;
     }
     
-    modal.style.display = 'block';
+    if (modal) modal.style.display = 'block';
 }
 
 function editProduct(productId) {
@@ -1703,6 +2301,8 @@ async function deleteProduct(productId) {
 // Gestion des transactions
 function displayTransactions() {
     const tbody = document.getElementById('transactionsTableBody');
+    if (!tbody) return;
+    
     tbody.innerHTML = '';
     
     if (transactions.length === 0) {
@@ -1741,19 +2341,25 @@ function openTransactionModal(transactionId = null) {
     const modal = document.getElementById('transactionModal');
     
     if (!transactionId) {
-        document.getElementById('transactionDate').value = new Date().toISOString().split('T')[0];
-        document.getElementById('transactionForm').reset();
+        const transactionDateField = document.getElementById('transactionDate');
+        const transactionForm = document.getElementById('transactionForm');
+        
+        if (transactionDateField) transactionDateField.value = new Date().toISOString().split('T')[0];
+        if (transactionForm) transactionForm.reset();
         updateTransactionForm();
     }
     
-    modal.style.display = 'block';
+    if (modal) modal.style.display = 'block';
 }
 
 function updateTransactionForm() {
-    const type = document.getElementById('transactionType').value;
+    const typeField = document.getElementById('transactionType');
     const partnerLabel = document.getElementById('partnerLabel');
     const partnerSelect = document.getElementById('transactionPartner');
     
+    if (!typeField || !partnerLabel || !partnerSelect) return;
+    
+    const type = typeField.value;
     partnerLabel.textContent = type === 'vente' ? 'Client *' : 'Fournisseur *';
     partnerSelect.innerHTML = '<option value="">Sélectionner</option>';
     
@@ -1772,7 +2378,8 @@ function updateTransactionForm() {
 
 // Gestion des modals
 function closeModal(modalId) {
-    document.getElementById(modalId).style.display = 'none';
+    const modal = document.getElementById(modalId);
+    if (modal) modal.style.display = 'none';
     currentEditId = null;
 }
 
@@ -2067,7 +2674,7 @@ function generatePDF(type, id) {
     doc.text(`${documentData.number}`, 150, 65);
 
     doc.setFont(undefined, 'bold');
-    doc.text(`  Date :`, 130, 72);
+    doc.text(`Date :`, 130, 72);
     doc.setFont(undefined, 'normal');
     doc.text(`${new Date(documentData.date).toLocaleDateString('fr-FR')}`, 150, 72);
 
@@ -2204,7 +2811,7 @@ function generatePDF(type, id) {
             if (type === 'order') docTypeWord = 'bon de commande';
         }
 
-        const arretText = `${arretPrefix} ${docTypeWord} à la somme de ${totalInWords}${centsInWords} ${companySettings.currency || 'DHS'}.`;
+        const arretText = `${arretPrefix} ${docTypeWord} à la somme de ${totalInWords}${centsInWords} ${companySettings.currency || 'DHS'} TTC.`;
         const arretLines = doc.splitTextToSize(arretText, 170);
         doc.text(arretLines, 20, arretY);
     }
@@ -2215,10 +2822,10 @@ function generatePDF(type, id) {
     // Cachet et signature
     if (companySettings.stamp) {
         try {
-            doc.setFontSize(12);
+            doc.setFontSize(9);
             doc.setFont(undefined, 'italic');
             doc.setTextColor(darkGray);
-            doc.text('Cachet et Signature', 173, footerY - 45, {align: 'center'});
+            doc.text('Signé et Cachet', 173, footerY - 45, {align: 'center'});
             doc.addImage(companySettings.stamp, 'PNG', 155, footerY - 40, 35, 25);
         } catch (error) {
             console.error('Erreur ajout cachet:', error);
@@ -2265,6 +2872,17 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
+    // Initialiser les dates de filtres par défaut (dernier mois)
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    const filterDateStart = document.getElementById('filterDateStart');
+    const filterDateEnd = document.getElementById('filterDateEnd');
+    
+    if (filterDateStart && filterDateEnd) {
+        filterDateStart.value = startOfMonth.toISOString().split('T')[0];
+        filterDateEnd.value = today;
+    }
+    
     // Initialiser les fonctionnalités d'upload d'images
     setupImageUpload();
     
@@ -2292,31 +2910,34 @@ document.addEventListener('DOMContentLoaded', function() {
             if (quoteId) {
                 const quote = quotes.find(q => q.id === quoteId);
                 if (quote) {
-                    document.getElementById('invoiceClient').value = quote.clientId;
+                    const invoiceClientField = document.getElementById('invoiceClient');
+                    if (invoiceClientField) invoiceClientField.value = quote.clientId;
                     
                     const container = document.getElementById('invoiceLines');
-                    container.innerHTML = '';
-                    
-                    quote.lines.forEach(line => {
-                        const newLine = document.createElement('div');
-                        newLine.className = 'line-item';
-                        newLine.innerHTML = `
-                            <input type="text" placeholder="Description" class="line-description" value="${line.description}">
-                            <input type="number" placeholder="Qté" class="line-quantity" step="0.01" value="${line.quantity}">
-                            <input type="number" placeholder="Prix unitaire" class="line-price" step="0.01" value="${line.price}">
-                            <input type="number" placeholder="Total" class="line-total" readonly value="${line.total}">
-                            <button type="button" onclick="removeLine(this)">🗑️</button>
-                        `;
-                        container.appendChild(newLine);
+                    if (container) {
+                        container.innerHTML = '';
                         
-                        const quantityInput = newLine.querySelector('.line-quantity');
-                        const priceInput = newLine.querySelector('.line-price');
+                        quote.lines.forEach(line => {
+                            const newLine = document.createElement('div');
+                            newLine.className = 'line-item';
+                            newLine.innerHTML = `
+                                <input type="text" placeholder="Description" class="line-description" value="${line.description}">
+                                <input type="number" placeholder="Qté" class="line-quantity" step="0.01" value="${line.quantity}">
+                                <input type="number" placeholder="Prix unitaire" class="line-price" step="0.01" value="${line.price}">
+                                <input type="number" placeholder="Total" class="line-total" readonly value="${line.total}">
+                                <button type="button" onclick="removeLine(this)">🗑️</button>
+                            `;
+                            container.appendChild(newLine);
+                            
+                            const quantityInput = newLine.querySelector('.line-quantity');
+                            const priceInput = newLine.querySelector('.line-price');
+                            
+                            if (quantityInput) quantityInput.addEventListener('input', () => calculateAllTotals('invoice'));
+                            if (priceInput) priceInput.addEventListener('input', () => calculateAllTotals('invoice'));
+                        });
                         
-                        quantityInput.addEventListener('input', () => calculateAllTotals('invoice'));
-                        priceInput.addEventListener('input', () => calculateAllTotals('invoice'));
-                    });
-                    
-                    calculateAllTotals('invoice');
+                        calculateAllTotals('invoice');
+                    }
                 }
             } else {
                 resetInvoiceLines();
@@ -2329,15 +2950,17 @@ document.addEventListener('DOMContentLoaded', function() {
     if (quoteValidity) {
         quoteValidity.addEventListener('change', function() {
             const customGroup = document.getElementById('customValidityGroup');
+            const quoteValidityDateField = document.getElementById('quoteValidityDate');
+            
             if (this.value === 'custom') {
-                customGroup.style.display = 'block';
+                if (customGroup) customGroup.style.display = 'block';
             } else {
-                customGroup.style.display = 'none';
+                if (customGroup) customGroup.style.display = 'none';
                 // Calculer automatiquement la date de validité
                 const days = parseInt(this.value);
                 const validityDate = new Date();
                 validityDate.setDate(validityDate.getDate() + days);
-                document.getElementById('quoteValidityDate').value = validityDate.toISOString().split('T')[0];
+                if (quoteValidityDateField) quoteValidityDateField.value = validityDate.toISOString().split('T')[0];
             }
         });
     }
@@ -2346,15 +2969,17 @@ document.addEventListener('DOMContentLoaded', function() {
     if (invoicePaymentDue) {
         invoicePaymentDue.addEventListener('change', function() {
             const customGroup = document.getElementById('customPaymentDueGroup');
+            const invoicePaymentDueDateField = document.getElementById('invoicePaymentDueDate');
+            
             if (this.value === 'custom') {
-                customGroup.style.display = 'block';
+                if (customGroup) customGroup.style.display = 'block';
             } else {
-                customGroup.style.display = 'none';
+                if (customGroup) customGroup.style.display = 'none';
                 // Calculer automatiquement la date d'échéance
                 const days = parseInt(this.value);
                 const dueDate = new Date();
                 dueDate.setDate(dueDate.getDate() + days);
-                document.getElementById('invoicePaymentDueDate').value = dueDate.toISOString().split('T')[0];
+                if (invoicePaymentDueDateField) invoicePaymentDueDateField.value = dueDate.toISOString().split('T')[0];
             }
         });
     }
@@ -2363,521 +2988,647 @@ document.addEventListener('DOMContentLoaded', function() {
     if (orderValidity) {
         orderValidity.addEventListener('change', function() {
             const customGroup = document.getElementById('customOrderValidityGroup');
+            const orderValidityDateField = document.getElementById('orderValidityDate');
+            
             if (this.value === 'custom') {
-                customGroup.style.display = 'block';
+                if (customGroup) customGroup.style.display = 'block';
             } else {
-                customGroup.style.display = 'none';
+                if (customGroup) customGroup.style.display = 'none';
                 // Calculer automatiquement la date de validité
                 const days = parseInt(this.value);
                 const validityDate = new Date();
                 validityDate.setDate(validityDate.getDate() + days);
-                document.getElementById('orderValidityDate').value = validityDate.toISOString().split('T')[0];
+                if (orderValidityDateField) orderValidityDateField.value = validityDate.toISOString().split('T')[0];
             }
         });
     }
     
     // Gestionnaires pour les formulaires d'authentification
-    document.getElementById('loginForm').addEventListener('submit', login);
-    document.getElementById('registerForm').addEventListener('submit', register);
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+    
+    if (loginForm) loginForm.addEventListener('submit', login);
+    if (registerForm) registerForm.addEventListener('submit', register);
     
     // Gestionnaire pour le formulaire des informations d'entreprise
-    document.getElementById('companyInfoForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
+    const companyInfoForm = document.getElementById('companyInfoForm');
+    if (companyInfoForm) {
+        companyInfoForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const companyNameField = document.getElementById('companyNameSettings');
+            const companySiretField = document.getElementById('companySiret');
+            const companyAddressField = document.getElementById('companyAddress');
+            const companyPhoneField = document.getElementById('companyPhone');
+            const companyEmailField = document.getElementById('companyEmail');
+            const companyWebsiteField = document.getElementById('companyWebsite');
+            
+            if (companyNameField) companySettings.name = companyNameField.value;
+            if (companySiretField) companySettings.siret = companySiretField.value;
+            if (companyAddressField) companySettings.address = companyAddressField.value;
+            if (companyPhoneField) companySettings.phone = companyPhoneField.value;
+            if (companyEmailField) companySettings.email = companyEmailField.value;
+            if (companyWebsiteField) companySettings.website = companyWebsiteField.value;
+            
+            await saveCompanySettings();
+        });
         
-        companySettings.name = document.getElementById('companyNameSettings').value;
-        companySettings.siret = document.getElementById('companySiret').value;
-        companySettings.address = document.getElementById('companyAddress').value;
-        companySettings.phone = document.getElementById('companyPhone').value;
-        companySettings.email = document.getElementById('companyEmail').value;
-        companySettings.website = document.getElementById('companyWebsite').value;
+        // Sauvegarde automatique des champs d'informations de l'entreprise
+        const companyFields = [
+            { id: 'companyNameSettings', key: 'name' },
+            { id: 'companySiret', key: 'siret' },
+            { id: 'companyAddress', key: 'address' },
+            { id: 'companyPhone', key: 'phone' },
+            { id: 'companyEmail', key: 'email' },
+            { id: 'companyWebsite', key: 'website' }
+        ];
         
-        await saveCompanySettings();
-    });
+        companyFields.forEach(field => {
+            const element = document.getElementById(field.id);
+            if (element) {
+                element.addEventListener('blur', function() {
+                    if (this.value !== companySettings[field.key]) {
+                        saveCompanyField(field.key, this.value);
+                        showAutoSaveNotification('💾 Informations sauvegardées');
+                    }
+                });
+            }
+        });
+    }
     
     // Gestionnaire pour les préférences de documents
-    document.getElementById('documentPreferencesForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
+    const documentPreferencesForm = document.getElementById('documentPreferencesForm');
+    if (documentPreferencesForm) {
+        documentPreferencesForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const defaultTaxRateField = document.getElementById('defaultTaxRate');
+            const defaultCurrencyField = document.getElementById('defaultCurrency');
+            const defaultPaymentTermsField = document.getElementById('defaultPaymentTerms');
+            const defaultNotesField = document.getElementById('defaultNotes');
+            
+            if (defaultTaxRateField) companySettings.taxRate = parseFloat(defaultTaxRateField.value) || 20;
+            if (defaultCurrencyField) companySettings.currency = defaultCurrencyField.value;
+            if (defaultPaymentTermsField) companySettings.paymentTerms = defaultPaymentTermsField.value;
+            if (defaultNotesField) companySettings.defaultNotes = defaultNotesField.value;
+            
+            await saveCompanySettings();
+        });
         
-        companySettings.taxRate = parseFloat(document.getElementById('defaultTaxRate').value) || 20;
-        companySettings.currency = document.getElementById('defaultCurrency').value;
-        companySettings.paymentTerms = document.getElementById('defaultPaymentTerms').value;
-        companySettings.defaultNotes = document.getElementById('defaultNotes').value;
+        // Sauvegarde automatique des préférences de documents
+        const preferenceFields = [
+            { id: 'defaultTaxRate', key: 'taxRate', type: 'number' },
+            { id: 'defaultCurrency', key: 'currency' },
+            { id: 'defaultPaymentTerms', key: 'paymentTerms' },
+            { id: 'defaultNotes', key: 'defaultNotes' }
+        ];
         
-        await saveCompanySettings();
-    });
+        preferenceFields.forEach(field => {
+            const element = document.getElementById(field.id);
+            if (element) {
+                element.addEventListener('change', function() {
+                    let newValue = this.value;
+                    if (field.type === 'number') {
+                        newValue = parseFloat(newValue) || 20;
+                    }
+                    
+                    if (newValue !== companySettings[field.key]) {
+                        saveCompanyField(field.key, newValue);
+                        showAutoSaveNotification('💾 Préférence sauvegardée');
+                    }
+                });
+            }
+        });
+    }
 
     // Gestionnaires pour tous les formulaires
-    document.getElementById('clientForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const clientData = {
-            name: document.getElementById('clientName').value,
-            type: document.getElementById('clientType').value,
-            email: document.getElementById('clientEmail').value,
-            phone: document.getElementById('clientPhone').value,
-            address: document.getElementById('clientAddress').value,
-            siret: document.getElementById('clientSiret').value,
-            vat: document.getElementById('clientVat').value,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        
-        try {
-            if (currentEditId) {
-                await db.collection('companies').doc(currentUser.uid).collection('clients').doc(currentEditId).update(clientData);
-                const index = clients.findIndex(c => c.id === currentEditId);
-                clients[index] = {...clients[index], ...clientData};
-            } else {
-                clientData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-                const docRef = await db.collection('companies').doc(currentUser.uid).collection('clients').add(clientData);
-                clients.push({id: docRef.id, ...clientData});
-            }
+    const clientForm = document.getElementById('clientForm');
+    if (clientForm) {
+        clientForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
             
-            closeModal('clientModal');
-            displayClients();
-            populateClientSelects();
-            showAlert('Client enregistré avec succès', 'success');
+            const clientData = {
+                name: document.getElementById('clientName').value,
+                type: document.getElementById('clientType').value,
+                email: document.getElementById('clientEmail').value,
+                phone: document.getElementById('clientPhone').value,
+                address: document.getElementById('clientAddress').value,
+                siret: document.getElementById('clientSiret').value,
+                vat: document.getElementById('clientVat').value,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
             
-        } catch (error) {
-            showAlert('Erreur lors de l\'enregistrement', 'error');
-            console.error(error);
-        }
-    });
-
-    document.getElementById('productForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const productData = {
-            reference: document.getElementById('productRef').value,
-            name: document.getElementById('productName').value,
-            buyPrice: parseFloat(document.getElementById('productBuyPrice').value) || 0,
-            sellPrice: parseFloat(document.getElementById('productSellPrice').value) || 0,
-            stock: parseInt(document.getElementById('productStock').value) || 0,
-            alertThreshold: parseInt(document.getElementById('productAlert').value) || 5,
-            description: document.getElementById('productDescription').value,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        
-        try {
-            if (currentEditId) {
-                await db.collection('companies').doc(currentUser.uid).collection('products').doc(currentEditId).update(productData);
-                const index = products.findIndex(p => p.id === currentEditId);
-                products[index] = {...products[index], ...productData};
-            } else {
-                productData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-                const docRef = await db.collection('companies').doc(currentUser.uid).collection('products').add(productData);
-                products.push({id: docRef.id, ...productData});
-            }
-            
-            closeModal('productModal');
-            displayStock();
-            showAlert('Produit enregistré avec succès', 'success');
-            
-        } catch (error) {
-            showAlert('Erreur lors de l\'enregistrement', 'error');
-            console.error(error);
-        }
-    });
-
-    document.getElementById('quoteForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const lines = [];
-        document.querySelectorAll('#quoteLines .line-item').forEach(line => {
-            const description = line.querySelector('.line-description').value;
-            const quantity = parseFloat(line.querySelector('.line-quantity').value) || 0;
-            const price = parseFloat(line.querySelector('.line-price').value) || 0;
-            const total = parseFloat(line.querySelector('.line-total').value) || 0;
-            
-            if (description && quantity > 0 && price > 0) {
-                lines.push({description, quantity, price, total});
-            }
-        });
-        
-        if (lines.length === 0) {
-            showAlert('Veuillez ajouter au moins une ligne valide', 'error');
-            return;
-        }
-        
-        const subtotal = lines.reduce((sum, line) => sum + line.total, 0);
-        const taxRate = companySettings.taxRate / 100;
-        const tax = subtotal * taxRate;
-        const totalTTC = subtotal + tax;
-        
-        // Calculer la date de validité
-        let validityDate = null;
-        const validityType = document.getElementById('quoteValidity').value;
-        if (validityType === 'custom') {
-            validityDate = document.getElementById('quoteValidityDate').value;
-        } else {
-            const days = parseInt(validityType);
-            const validity = new Date();
-            validity.setDate(validity.getDate() + days);
-            validityDate = validity.toISOString().split('T')[0];
-        }
-        
-        const quoteData = {
-            number: document.getElementById('quoteNumber').value,
-            date: document.getElementById('quoteDate').value,
-            clientId: document.getElementById('quoteClient').value,
-            validityDate: validityDate,
-            lines: lines,
-            subtotal: subtotal,
-            tax: tax,
-            totalTTC: totalTTC,
-            status: 'en-attente',
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        
-        try {
-            if (currentEditId) {
-                await db.collection('companies').doc(currentUser.uid).collection('quotes').doc(currentEditId).update(quoteData);
-                const index = quotes.findIndex(q => q.id === currentEditId);
-                quotes[index] = {...quotes[index], ...quoteData};
-            } else {
-                quoteData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-                const docRef = await db.collection('companies').doc(currentUser.uid).collection('quotes').add(quoteData);
-                quotes.push({id: docRef.id, ...quoteData});
-            }
-            
-            closeModal('quoteModal');
-            displayQuotes();
-            updateDashboard();
-            showAlert('Devis enregistré avec succès', 'success');
-            
-        } catch (error) {
-            showAlert('Erreur lors de l\'enregistrement', 'error');
-            console.error(error);
-        }
-    });
-
-    document.getElementById('invoiceForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const lines = [];
-        document.querySelectorAll('#invoiceLines .line-item').forEach(line => {
-            const description = line.querySelector('.line-description').value;
-            const quantity = parseFloat(line.querySelector('.line-quantity').value) || 0;
-            const price = parseFloat(line.querySelector('.line-price').value) || 0;
-            const total = parseFloat(line.querySelector('.line-total').value) || 0;
-            
-            if (description && quantity > 0 && price > 0) {
-                lines.push({description, quantity, price, total});
-            }
-        });
-        
-        if (lines.length === 0) {
-            showAlert('Veuillez ajouter au moins une ligne valide', 'error');
-            return;
-        }
-        
-        const subtotal = lines.reduce((sum, line) => sum + line.total, 0);
-        const taxRate = companySettings.taxRate / 100;
-        const tax = subtotal * taxRate;
-        const totalTTC = subtotal + tax;
-        
-        // Calculer la date d'échéance de paiement
-        let paymentDueDate = null;
-        const paymentDueType = document.getElementById('invoicePaymentDue').value;
-        if (paymentDueType === 'custom') {
-            paymentDueDate = document.getElementById('invoicePaymentDueDate').value;
-        } else if (paymentDueType !== '0') {
-            const days = parseInt(paymentDueType);
-            const dueDate = new Date(document.getElementById('invoiceDate').value);
-            dueDate.setDate(dueDate.getDate() + days);
-            paymentDueDate = dueDate.toISOString().split('T')[0];
-        }
-        
-        const invoiceData = {
-            number: document.getElementById('invoiceNumber').value,
-            date: document.getElementById('invoiceDate').value,
-            clientId: document.getElementById('invoiceClient').value,
-            type: document.getElementById('invoiceType').value,
-            paymentDueDate: paymentDueDate,
-            lines: lines,
-            subtotal: subtotal,
-            tax: tax,
-            totalTTC: totalTTC,
-            paymentStatus: 'impayee',
-            deliveryStatus: 'non-livree',
-            fromQuoteId: document.getElementById('fromQuote').value || null,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        
-        try {
-            if (currentEditId) {
-                await db.collection('companies').doc(currentUser.uid).collection('invoices').doc(currentEditId).update(invoiceData);
-                const index = invoices.findIndex(i => i.id === currentEditId);
-                invoices[index] = {...invoices[index], ...invoiceData};
-            } else {
-                invoiceData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-                const docRef = await db.collection('companies').doc(currentUser.uid).collection('invoices').add(invoiceData);
-                invoices.push({id: docRef.id, ...invoiceData});
-            }
-            
-            closeModal('invoiceModal');
-            displayInvoices();
-            updateDashboard();
-            showAlert('Facture enregistrée avec succès', 'success');
-            
-        } catch (error) {
-            showAlert('Erreur lors de l\'enregistrement', 'error');
-            console.error(error);
-        }
-    });
-
-    document.getElementById('paymentForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const paymentData = {
-            type: document.getElementById('paymentType').value,
-            date: document.getElementById('paymentDate').value,
-            partnerId: document.getElementById('paymentPartner').value,
-            amount: parseFloat(document.getElementById('paymentAmount').value),
-            method: document.getElementById('paymentMethod').value,
-            reference: document.getElementById('paymentReference').value,
-            invoiceId: document.getElementById('paymentInvoice').value || null,
-            notes: document.getElementById('paymentNotes').value,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        
-        try {
-            if (currentEditId) {
-                await db.collection('companies').doc(currentUser.uid).collection('payments').doc(currentEditId).update(paymentData);
-                const index = payments.findIndex(p => p.id === currentEditId);
-                payments[index] = {...payments[index], ...paymentData};
-            } else {
-                paymentData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-                const docRef = await db.collection('companies').doc(currentUser.uid).collection('payments').add(paymentData);
-                payments.push({id: docRef.id, ...paymentData});
-            }
-            
-            closeModal('paymentModal');
-            displayPayments();
-            
-            // Mettre à jour les statuts des factures
-            updateInvoiceStatuses();
-            displayInvoices();
-            
-            showAlert('Paiement enregistré avec succès', 'success');
-            
-        } catch (error) {
-            showAlert('Erreur lors de l\'enregistrement', 'error');
-            console.error(error);
-        }
-    });
-
-    document.getElementById('deliveryForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const lines = [];
-        document.querySelectorAll('#deliveryLines .line-item').forEach(line => {
-            const description = line.querySelector('.line-description').value;
-            const quantity = parseFloat(line.querySelector('.line-quantity').value) || 0;
-            const reference = line.querySelector('.line-reference').value;
-            
-            if (description && quantity > 0) {
-                lines.push({description, quantity, reference});
-            }
-        });
-        
-        if (lines.length === 0) {
-            showAlert('Veuillez ajouter au moins une ligne valide', 'error');
-            return;
-        }
-        
-        const deliveryData = {
-            number: document.getElementById('deliveryNumber').value,
-            date: document.getElementById('deliveryDate').value,
-            clientId: document.getElementById('deliveryClient').value,
-            status: document.getElementById('deliveryStatus').value,
-            lines: lines,
-            notes: document.getElementById('deliveryNotes').value,
-            invoiceId: document.getElementById('deliveryInvoice').value || null,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        
-        try {
-            if (currentEditId) {
-                await db.collection('companies').doc(currentUser.uid).collection('deliveries').doc(currentEditId).update(deliveryData);
-                const index = deliveries.findIndex(d => d.id === currentEditId);
-                deliveries[index] = {...deliveries[index], ...deliveryData};
-            } else {
-                deliveryData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-                const docRef = await db.collection('companies').doc(currentUser.uid).collection('deliveries').add(deliveryData);
-                deliveries.push({id: docRef.id, ...deliveryData});
-            }
-            
-            closeModal('deliveryModal');
-            displayDeliveries();
-            
-            // Mettre à jour les statuts des factures
-            updateInvoiceStatuses();
-            displayInvoices();
-            
-            showAlert('Bon de livraison enregistré avec succès', 'success');
-            
-        } catch (error) {
-            showAlert('Erreur lors de l\'enregistrement', 'error');
-            console.error(error);
-        }
-    });
-
-    document.getElementById('orderForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const lines = [];
-        document.querySelectorAll('#orderLines .line-item').forEach(line => {
-            const description = line.querySelector('.line-description').value;
-            const quantity = parseFloat(line.querySelector('.line-quantity').value) || 0;
-            const price = parseFloat(line.querySelector('.line-price').value) || 0;
-            const total = parseFloat(line.querySelector('.line-total').value) || 0;
-            
-            if (description && quantity > 0 && price > 0) {
-                lines.push({description, quantity, price, total});
-            }
-        });
-        
-        if (lines.length === 0) {
-            showAlert('Veuillez ajouter au moins une ligne valide', 'error');
-            return;
-        }
-        
-        const subtotal = lines.reduce((sum, line) => sum + line.total, 0);
-        const taxRate = companySettings.taxRate / 100;
-        const tax = subtotal * taxRate;
-        const totalTTC = subtotal + tax;
-        
-        // Calculer la date de validité
-        let validityDate = null;
-        const validityType = document.getElementById('orderValidity').value;
-        if (validityType === 'custom') {
-            validityDate = document.getElementById('orderValidityDate').value;
-        } else {
-            const days = parseInt(validityType);
-            const validity = new Date();
-            validity.setDate(validity.getDate() + days);
-            validityDate = validity.toISOString().split('T')[0];
-        }
-        
-        const orderData = {
-            number: document.getElementById('orderNumber').value,
-            date: document.getElementById('orderDate').value,
-            supplierId: document.getElementById('orderSupplier').value,
-            deliveryDate: document.getElementById('orderDeliveryDate').value,
-            validityDate: validityDate,
-            lines: lines,
-            subtotal: subtotal,
-            tax: tax,
-            totalTTC: totalTTC,
-            status: 'en-attente',
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        
-        try {
-            if (currentEditId) {
-                await db.collection('companies').doc(currentUser.uid).collection('orders').doc(currentEditId).update(orderData);
-                const index = orders.findIndex(o => o.id === currentEditId);
-                orders[index] = {...orders[index], ...orderData};
-            } else {
-                orderData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-                const docRef = await db.collection('companies').doc(currentUser.uid).collection('orders').add(orderData);
-                orders.push({id: docRef.id, ...orderData});
-            }
-            
-            closeModal('orderModal');
-            displayOrders();
-            showAlert('Bon de commande enregistré avec succès', 'success');
-            
-        } catch (error) {
-            showAlert('Erreur lors de l\'enregistrement', 'error');
-            console.error(error);
-        }
-    });
-
-    document.getElementById('transactionForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const quantity = parseFloat(document.getElementById('transactionQuantity').value) || 1;
-        const price = parseFloat(document.getElementById('transactionPrice').value);
-        const total = quantity * price;
-        
-        const transactionData = {
-            type: document.getElementById('transactionType').value,
-            date: document.getElementById('transactionDate').value,
-            partnerId: document.getElementById('transactionPartner').value,
-            productId: document.getElementById('transactionProduct').value || null,
-            quantity: quantity,
-            price: price,
-            total: total,
-            description: document.getElementById('transactionDescription').value,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        
-        try {
-            if (currentEditId) {
-                await db.collection('companies').doc(currentUser.uid).collection('transactions').doc(currentEditId).update(transactionData);
-                const index = transactions.findIndex(t => t.id === currentEditId);
-                transactions[index] = {...transactions[index], ...transactionData};
-            } else {
-                transactionData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-                const docRef = await db.collection('companies').doc(currentUser.uid).collection('transactions').add(transactionData);
-                transactions.push({id: docRef.id, ...transactionData});
-            }
-            
-            // Mettre à jour le stock si un produit est sélectionné
-            if (transactionData.productId) {
-                const product = products.find(p => p.id === transactionData.productId);
-                if (product) {
-                    const newStock = transactionData.type === 'achat' ? 
-                        product.stock + quantity : product.stock - quantity;
-                    
-                    await db.collection('companies').doc(currentUser.uid).collection('products').doc(transactionData.productId).update({
-                        stock: newStock
-                    });
-                    
-                    product.stock = newStock;
+            try {
+                if (currentEditId) {
+                    await db.collection('companies').doc(currentUser.uid).collection('clients').doc(currentEditId).update(clientData);
+                    const index = clients.findIndex(c => c.id === currentEditId);
+                    clients[index] = {...clients[index], ...clientData};
+                } else {
+                    clientData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                    const docRef = await db.collection('companies').doc(currentUser.uid).collection('clients').add(clientData);
+                    clients.push({id: docRef.id, ...clientData});
                 }
+                
+                closeModal('clientModal');
+                displayClients();
+                populateClientSelects();
+                showAlert('Client enregistré avec succès', 'success');
+                
+            } catch (error) {
+                showAlert('Erreur lors de l\'enregistrement', 'error');
+                console.error(error);
+            }
+        });
+    }
+
+    const productForm = document.getElementById('productForm');
+    if (productForm) {
+        productForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const productData = {
+                reference: document.getElementById('productRef').value,
+                name: document.getElementById('productName').value,
+                buyPrice: parseFloat(document.getElementById('productBuyPrice').value) || 0,
+                sellPrice: parseFloat(document.getElementById('productSellPrice').value) || 0,
+                stock: parseInt(document.getElementById('productStock').value) || 0,
+                alertThreshold: parseInt(document.getElementById('productAlert').value) || 5,
+                description: document.getElementById('productDescription').value,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            
+            try {
+                if (currentEditId) {
+                    await db.collection('companies').doc(currentUser.uid).collection('products').doc(currentEditId).update(productData);
+                    const index = products.findIndex(p => p.id === currentEditId);
+                    products[index] = {...products[index], ...productData};
+                } else {
+                    productData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                    const docRef = await db.collection('companies').doc(currentUser.uid).collection('products').add(productData);
+                    products.push({id: docRef.id, ...productData});
+                }
+                
+                closeModal('productModal');
+                displayStock();
+                showAlert('Produit enregistré avec succès', 'success');
+                
+            } catch (error) {
+                showAlert('Erreur lors de l\'enregistrement', 'error');
+                console.error(error);
+            }
+        });
+    }
+
+    const quoteForm = document.getElementById('quoteForm');
+    if (quoteForm) {
+        quoteForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const lines = [];
+            document.querySelectorAll('#quoteLines .line-item').forEach(line => {
+                const description = line.querySelector('.line-description').value;
+                const quantity = parseFloat(line.querySelector('.line-quantity').value) || 0;
+                const price = parseFloat(line.querySelector('.line-price').value) || 0;
+                const total = parseFloat(line.querySelector('.line-total').value) || 0;
+                
+                if (description && quantity > 0 && price > 0) {
+                    lines.push({description, quantity, price, total});
+                }
+            });
+            
+            if (lines.length === 0) {
+                showAlert('Veuillez ajouter au moins une ligne valide', 'error');
+                return;
             }
             
-            closeModal('transactionModal');
-            displayTransactions();
-            displayStock();
-            showAlert('Transaction enregistrée avec succès', 'success');
+            const subtotal = lines.reduce((sum, line) => sum + line.total, 0);
+            const taxRate = companySettings.taxRate / 100;
+            const tax = subtotal * taxRate;
+            const totalTTC = subtotal + tax;
             
-        } catch (error) {
-            showAlert('Erreur lors de l\'enregistrement', 'error');
-            console.error(error);
-        }
-    });
+            // Calculer la date de validité
+            let validityDate = null;
+            const validityType = document.getElementById('quoteValidity').value;
+            if (validityType === 'custom') {
+                validityDate = document.getElementById('quoteValidityDate').value;
+            } else {
+                const days = parseInt(validityType);
+                const validity = new Date();
+                validity.setDate(validity.getDate() + days);
+                validityDate = validity.toISOString().split('T')[0];
+            }
+            
+            const quoteData = {
+                number: document.getElementById('quoteNumber').value,
+                date: document.getElementById('quoteDate').value,
+                clientId: document.getElementById('quoteClient').value,
+                validityDate: validityDate,
+                lines: lines,
+                subtotal: subtotal,
+                tax: tax,
+                totalTTC: totalTTC,
+                status: 'en-attente',
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            
+            try {
+                if (currentEditId) {
+                    await db.collection('companies').doc(currentUser.uid).collection('quotes').doc(currentEditId).update(quoteData);
+                    const index = quotes.findIndex(q => q.id === currentEditId);
+                    quotes[index] = {...quotes[index], ...quoteData};
+                } else {
+                    quoteData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                    const docRef = await db.collection('companies').doc(currentUser.uid).collection('quotes').add(quoteData);
+                    quotes.push({id: docRef.id, ...quoteData});
+                }
+                
+                closeModal('quoteModal');
+                displayQuotes();
+                updateDashboard();
+                showAlert('Devis enregistré avec succès', 'success');
+                
+            } catch (error) {
+                showAlert('Erreur lors de l\'enregistrement', 'error');
+                console.error(error);
+            }
+        });
+    }
+
+    const invoiceForm = document.getElementById('invoiceForm');
+    if (invoiceForm) {
+        invoiceForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const lines = [];
+            document.querySelectorAll('#invoiceLines .line-item').forEach(line => {
+                const description = line.querySelector('.line-description').value;
+                const quantity = parseFloat(line.querySelector('.line-quantity').value) || 0;
+                const price = parseFloat(line.querySelector('.line-price').value) || 0;
+                const total = parseFloat(line.querySelector('.line-total').value) || 0;
+                
+                if (description && quantity > 0 && price > 0) {
+                    lines.push({description, quantity, price, total});
+                }
+            });
+            
+            if (lines.length === 0) {
+                showAlert('Veuillez ajouter au moins une ligne valide', 'error');
+                return;
+            }
+            
+            const subtotal = lines.reduce((sum, line) => sum + line.total, 0);
+            const taxRate = companySettings.taxRate / 100;
+            const tax = subtotal * taxRate;
+            const totalTTC = subtotal + tax;
+            
+            // Calculer la date d'échéance de paiement
+            let paymentDueDate = null;
+            const paymentDueType = document.getElementById('invoicePaymentDue').value;
+            if (paymentDueType === 'custom') {
+                paymentDueDate = document.getElementById('invoicePaymentDueDate').value;
+            } else if (paymentDueType !== '0') {
+                const days = parseInt(paymentDueType);
+                const dueDate = new Date(document.getElementById('invoiceDate').value);
+                dueDate.setDate(dueDate.getDate() + days);
+                paymentDueDate = dueDate.toISOString().split('T')[0];
+            }
+            
+            const invoiceData = {
+                number: document.getElementById('invoiceNumber').value,
+                date: document.getElementById('invoiceDate').value,
+                clientId: document.getElementById('invoiceClient').value,
+                type: document.getElementById('invoiceType').value,
+                paymentDueDate: paymentDueDate,
+                lines: lines,
+                subtotal: subtotal,
+                tax: tax,
+                totalTTC: totalTTC,
+                paymentStatus: 'impayee',
+                deliveryStatus: 'non-livree',
+                fromQuoteId: document.getElementById('fromQuote').value || null,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            
+            try {
+                if (currentEditId) {
+                    await db.collection('companies').doc(currentUser.uid).collection('invoices').doc(currentEditId).update(invoiceData);
+                    const index = invoices.findIndex(i => i.id === currentEditId);
+                    invoices[index] = {...invoices[index], ...invoiceData};
+                } else {
+                    invoiceData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                    const docRef = await db.collection('companies').doc(currentUser.uid).collection('invoices').add(invoiceData);
+                    invoices.push({id: docRef.id, ...invoiceData});
+                }
+                
+                closeModal('invoiceModal');
+                displayInvoices();
+                updateDashboard();
+                showAlert('Facture enregistrée avec succès', 'success');
+                
+            } catch (error) {
+                showAlert('Erreur lors de l\'enregistrement', 'error');
+                console.error(error);
+            }
+        });
+    }
+
+    const paymentForm = document.getElementById('paymentForm');
+    if (paymentForm) {
+        paymentForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const paymentData = {
+                type: document.getElementById('paymentType').value,
+                date: document.getElementById('paymentDate').value,
+                partnerId: document.getElementById('paymentPartner').value,
+                amount: parseFloat(document.getElementById('paymentAmount').value),
+                method: document.getElementById('paymentMethod').value,
+                reference: document.getElementById('paymentReference').value,
+                invoiceId: document.getElementById('paymentInvoice').value || null,
+                notes: document.getElementById('paymentNotes').value,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            
+            try {
+                if (currentEditId) {
+                    await db.collection('companies').doc(currentUser.uid).collection('payments').doc(currentEditId).update(paymentData);
+                    const index = payments.findIndex(p => p.id === currentEditId);
+                    payments[index] = {...payments[index], ...paymentData};
+                } else {
+                    paymentData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                    const docRef = await db.collection('companies').doc(currentUser.uid).collection('payments').add(paymentData);
+                    payments.push({id: docRef.id, ...paymentData});
+                }
+                
+                closeModal('paymentModal');
+                displayPayments();
+                
+                // Mettre à jour les statuts des factures
+                updateInvoiceStatuses();
+                displayInvoices();
+                
+                showAlert('Paiement enregistré avec succès', 'success');
+                
+            } catch (error) {
+                showAlert('Erreur lors de l\'enregistrement', 'error');
+                console.error(error);
+            }
+        });
+    }
+
+    const deliveryForm = document.getElementById('deliveryForm');
+    if (deliveryForm) {
+        deliveryForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const lines = [];
+            document.querySelectorAll('#deliveryLines .line-item').forEach(line => {
+                const description = line.querySelector('.line-description').value;
+                const quantity = parseFloat(line.querySelector('.line-quantity').value) || 0;
+                const reference = line.querySelector('.line-reference').value;
+                
+                if (description && quantity > 0) {
+                    lines.push({description, quantity, reference});
+                }
+            });
+            
+            if (lines.length === 0) {
+                showAlert('Veuillez ajouter au moins une ligne valide', 'error');
+                return;
+            }
+            
+            const deliveryData = {
+                number: document.getElementById('deliveryNumber').value,
+                date: document.getElementById('deliveryDate').value,
+                clientId: document.getElementById('deliveryClient').value,
+                status: document.getElementById('deliveryStatus').value,
+                lines: lines,
+                notes: document.getElementById('deliveryNotes').value,
+                invoiceId: document.getElementById('deliveryInvoice').value || null,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            
+            try {
+                if (currentEditId) {
+                    await db.collection('companies').doc(currentUser.uid).collection('deliveries').doc(currentEditId).update(deliveryData);
+                    const index = deliveries.findIndex(d => d.id === currentEditId);
+                    deliveries[index] = {...deliveries[index], ...deliveryData};
+                } else {
+                    deliveryData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                    const docRef = await db.collection('companies').doc(currentUser.uid).collection('deliveries').add(deliveryData);
+                    deliveries.push({id: docRef.id, ...deliveryData});
+                }
+                
+                closeModal('deliveryModal');
+                displayDeliveries();
+                
+                // Mettre à jour les statuts des factures
+                updateInvoiceStatuses();
+                displayInvoices();
+                
+                showAlert('Bon de livraison enregistré avec succès', 'success');
+                
+            } catch (error) {
+                showAlert('Erreur lors de l\'enregistrement', 'error');
+                console.error(error);
+            }
+        });
+    }
+
+    const orderForm = document.getElementById('orderForm');
+    if (orderForm) {
+        orderForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const lines = [];
+            document.querySelectorAll('#orderLines .line-item').forEach(line => {
+                const description = line.querySelector('.line-description').value;
+                const quantity = parseFloat(line.querySelector('.line-quantity').value) || 0;
+                const price = parseFloat(line.querySelector('.line-price').value) || 0;
+                const total = parseFloat(line.querySelector('.line-total').value) || 0;
+                
+                if (description && quantity > 0 && price > 0) {
+                    lines.push({description, quantity, price, total});
+                }
+            });
+            
+            if (lines.length === 0) {
+                showAlert('Veuillez ajouter au moins une ligne valide', 'error');
+                return;
+            }
+            
+            const subtotal = lines.reduce((sum, line) => sum + line.total, 0);
+            const taxRate = companySettings.taxRate / 100;
+            const tax = subtotal * taxRate;
+            const totalTTC = subtotal + tax;
+            
+            // Calculer la date de validité
+            let validityDate = null;
+            const validityType = document.getElementById('orderValidity').value;
+            if (validityType === 'custom') {
+                validityDate = document.getElementById('orderValidityDate').value;
+            } else {
+                const days = parseInt(validityType);
+                const validity = new Date();
+                validity.setDate(validity.getDate() + days);
+                validityDate = validity.toISOString().split('T')[0];
+            }
+            
+            const orderData = {
+                number: document.getElementById('orderNumber').value,
+                date: document.getElementById('orderDate').value,
+                supplierId: document.getElementById('orderSupplier').value,
+                deliveryDate: document.getElementById('orderDeliveryDate').value,
+                validityDate: validityDate,
+                lines: lines,
+                subtotal: subtotal,
+                tax: tax,
+                totalTTC: totalTTC,
+                status: 'en-attente',
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            
+            try {
+                if (currentEditId) {
+                    await db.collection('companies').doc(currentUser.uid).collection('orders').doc(currentEditId).update(orderData);
+                    const index = orders.findIndex(o => o.id === currentEditId);
+                    orders[index] = {...orders[index], ...orderData};
+                } else {
+                    orderData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                    const docRef = await db.collection('companies').doc(currentUser.uid).collection('orders').add(orderData);
+                    orders.push({id: docRef.id, ...orderData});
+                }
+                
+                closeModal('orderModal');
+                displayOrders();
+                showAlert('Bon de commande enregistré avec succès', 'success');
+                
+            } catch (error) {
+                showAlert('Erreur lors de l\'enregistrement', 'error');
+                console.error(error);
+            }
+        });
+    }
+
+    const transactionForm = document.getElementById('transactionForm');
+    if (transactionForm) {
+        transactionForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const quantity = parseFloat(document.getElementById('transactionQuantity').value) || 1;
+            const price = parseFloat(document.getElementById('transactionPrice').value);
+            const total = quantity * price;
+            
+            const transactionData = {
+                type: document.getElementById('transactionType').value,
+                date: document.getElementById('transactionDate').value,
+                partnerId: document.getElementById('transactionPartner').value,
+                productId: document.getElementById('transactionProduct').value || null,
+                quantity: quantity,
+                price: price,
+                total: total,
+                description: document.getElementById('transactionDescription').value,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            
+            try {
+                if (currentEditId) {
+                    await db.collection('companies').doc(currentUser.uid).collection('transactions').doc(currentEditId).update(transactionData);
+                    const index = transactions.findIndex(t => t.id === currentEditId);
+                    transactions[index] = {...transactions[index], ...transactionData};
+                } else {
+                    transactionData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                    const docRef = await db.collection('companies').doc(currentUser.uid).collection('transactions').add(transactionData);
+                    transactions.push({id: docRef.id, ...transactionData});
+                }
+                
+                // Mettre à jour le stock si un produit est sélectionné
+                if (transactionData.productId) {
+                    const product = products.find(p => p.id === transactionData.productId);
+                    if (product) {
+                        const newStock = transactionData.type === 'achat' ? 
+                            product.stock + quantity : product.stock - quantity;
+                        
+                        await db.collection('companies').doc(currentUser.uid).collection('products').doc(transactionData.productId).update({
+                            stock: newStock
+                        });
+                        
+                        product.stock = newStock;
+                    }
+                }
+                
+                closeModal('transactionModal');
+                displayTransactions();
+                displayStock();
+                showAlert('Transaction enregistrée avec succès', 'success');
+                
+            } catch (error) {
+                showAlert('Erreur lors de l\'enregistrement', 'error');
+                console.error(error);
+            }
+        });
+    }
 
     // Event listeners pour les calculs automatiques des transactions
-    document.getElementById('transactionQuantity').addEventListener('input', function() {
-        const quantity = parseFloat(this.value) || 0;
-        const price = parseFloat(document.getElementById('transactionPrice').value) || 0;
-        document.getElementById('transactionTotal').value = (quantity * price).toFixed(2);
-    });
+    const transactionQuantityField = document.getElementById('transactionQuantity');
+    if (transactionQuantityField) {
+        transactionQuantityField.addEventListener('input', function() {
+            const quantity = parseFloat(this.value) || 0;
+            const priceField = document.getElementById('transactionPrice');
+            const totalField = document.getElementById('transactionTotal');
+            
+            if (priceField && totalField) {
+                const price = parseFloat(priceField.value) || 0;
+                totalField.value = (quantity * price).toFixed(2);
+            }
+        });
+    }
 
-    document.getElementById('transactionPrice').addEventListener('input', function() {
-        const quantity = parseFloat(document.getElementById('transactionQuantity').value) || 1;
-        const price = parseFloat(this.value) || 0;
-        document.getElementById('transactionTotal').value = (quantity * price).toFixed(2);
-    });
+    const transactionPriceField = document.getElementById('transactionPrice');
+    if (transactionPriceField) {
+        transactionPriceField.addEventListener('input', function() {
+            const quantityField = document.getElementById('transactionQuantity');
+            const totalField = document.getElementById('transactionTotal');
+            
+            if (quantityField && totalField) {
+                const quantity = parseFloat(quantityField.value) || 1;
+                const price = parseFloat(this.value) || 0;
+                totalField.value = (quantity * price).toFixed(2);
+            }
+        });
+    }
 
     // Event listener pour le changement de produit dans les transactions
-    document.getElementById('transactionProduct').addEventListener('change', function() {
-        const productId = this.value;
-        const product = products.find(p => p.id === productId);
-        const type = document.getElementById('transactionType').value;
-        
-        if (product) {
-            const price = type === 'vente' ? product.sellPrice : product.buyPrice;
-            if (price) {
-                document.getElementById('transactionPrice').value = price;
-                const quantity = parseFloat(document.getElementById('transactionQuantity').value) || 1;
-                document.getElementById('transactionTotal').value = (quantity * price).toFixed(2);
+    const transactionProductField = document.getElementById('transactionProduct');
+    if (transactionProductField) {
+        transactionProductField.addEventListener('change', function() {
+            const productId = this.value;
+            const product = products.find(p => p.id === productId);
+            const typeField = document.getElementById('transactionType');
+            const priceField = document.getElementById('transactionPrice');
+            const quantityField = document.getElementById('transactionQuantity');
+            const totalField = document.getElementById('transactionTotal');
+            
+            if (product && typeField && priceField) {
+                const type = typeField.value;
+                const price = type === 'vente' ? product.sellPrice : product.buyPrice;
+                
+                if (price) {
+                    priceField.value = price;
+                    if (quantityField && totalField) {
+                        const quantity = parseFloat(quantityField.value) || 1;
+                        totalField.value = (quantity * price).toFixed(2);
+                    }
+                }
             }
-        }
-    });
+        });
+    }
+
+    // Event listener pour le changement de type de transaction
+    const transactionTypeField = document.getElementById('transactionType');
+    if (transactionTypeField) {
+        transactionTypeField.addEventListener('change', updateTransactionForm);
+    }
 });
 
 // Fermeture des modals en cliquant à l'extérieur

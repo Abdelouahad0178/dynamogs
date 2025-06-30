@@ -191,7 +191,7 @@ body {
 }
 
 .module h2 {
-    color: #260879;
+    color: #333;
     margin-bottom: 30px;
     font-size: 24px;
 }
@@ -672,6 +672,70 @@ body {
     margin-bottom: 30px;
 }
 
+.filters-grid {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 15px;
+}
+
+.filters-grid .form-row {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 15px;
+    align-items: end;
+}
+
+.filters-grid .form-row:last-child {
+    margin-bottom: 0;
+}
+
+.filters-grid .form-group {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+.filters-grid .form-group label {
+    font-size: 0.9em;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 5px;
+}
+
+.filters-grid input,
+.filters-grid select {
+    padding: 10px 12px;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    background: white;
+}
+
+.filters-grid input:focus,
+.filters-grid select:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.filters-grid .btn {
+    padding: 10px 20px;
+    height: fit-content;
+    white-space: nowrap;
+}
+
+@media (max-width: 992px) {
+    .filters-grid .form-row {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .filters-grid .form-group {
+        width: 100%;
+    }
+}
+
 .quick-actions {
     display: flex;
     flex-wrap: wrap;
@@ -896,7 +960,8 @@ body {
     .quick-actions,
     .chart-container,
     .btn-group,
-    .status-actions {
+    .status-actions,
+    .filters-grid {
         display: none !important;
     }
     
@@ -1057,6 +1122,7 @@ body {
     }
 }
 
+
 /* Responsive Design */
 @media (max-width: 1200px) {
     .dashboard-grid {
@@ -1065,11 +1131,6 @@ body {
     
     .stats-grid {
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    }
-
-    p, span, div, td, th, label, input, textarea, select {
-        color: black !important;
-        background: white !important;
     }
 }
 
@@ -1095,10 +1156,6 @@ body {
     .modal-content {
         width: 95%;
         margin: 2% auto;
-    }
-    p, span, div, td, th, label, input, textarea, select {
-        color: black !important;
-        background: white !important;
     }
 }
 
@@ -1152,10 +1209,6 @@ body {
         margin: 2px 0;
         min-width: auto;
     }
-    p, span, div, td, th, label, input, textarea, select {
-        color: black !important;
-        background: white !important;
-    }
 }
 
 @media (max-width: 576px) {
@@ -1184,9 +1237,5 @@ body {
 
     .modal-content {
         padding: 15px;
-    }
-    p, span, div, td, th, label, input, textarea, select {
-        color: black !important;
-        background: white !important;
     }
 }
